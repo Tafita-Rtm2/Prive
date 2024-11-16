@@ -1,36 +1,58 @@
 const axios = require('axios');
 const { sendMessage } = require('../handles/sendMessage');
+const fs = require('fs');
+
+const token = fs.readFileSync('token.txt', 'utf8');
 
 module.exports = {
-  name: 'ytb',
-  description: 'Search and send a YouTube video link.',
-  usage: 'youtube [video name]',
-  author: 'coffee',
+  name: 'video',
+  description: 'Search YouTube video and send video',
+  author: 'Tata',
 
-  async execute(senderId, args, pageAccessToken) {
+  async execute(senderId, args) {
+    const pageAccessToken = token;
+    const query = args.join(' ');
+
+    // Validation de la recherche utilisateur
+    if (!query.trim()) {
+      await sendMessage(senderId, { text: "Veuillez fournir un titre ou des mots-clés pour rechercher une vidéo." }, pageAccessToken);
+      return;
+    }
+
     try {
-      // Envoyer un message pour indiquer que la recherche est en cours
-      await sendMessage(senderId, { text: '🎥 Recherche de la vidéo sur YouTube... 🔍' }, pageAccessToken);
+      // Recherche de vidéos YouTube en fonction de l'entrée utilisateur
+      const searchResponse = await axios.get(`https://me0xn4hy3i.execute-api.us-east-1.amazonaws.com/staging/api/resolve/resolveYoutubeSearch?search=${encodeURIComponent(query)}`);
+      const videos = searchResponse.data.data;
 
-      // Effectuer une recherche via l'API YouTube pour obtenir le lien de la vidéo
-      const query = encodeURIComponent(args.join(' '));
-      const apiKey = 'AIzaSyAAWHCim0MH-d6pILuwoUj7RyUv3hl2rzI';
-      const { data } = await axios.get(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&q=${query}&key=${apiKey}`);
-      
-      // Vérifier si des résultats ont été trouvés
-      const videoId = data.items[0]?.id?.videoId;
-      if (!videoId) {
-        return sendMessage(senderId, { text: 'Désolé, aucune vidéo trouvée pour cette recherche.' }, pageAccessToken);
+      if (!videos || videos.length === 0) {
+        await sendMessage(senderId, { text: "Aucune vidéo trouvée pour votre recherche." }, pageAccessToken);
+        return;
       }
 
-      // Créer le lien de la vidéo YouTube
-      const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+      // Prendre la première vidéo trouvée
+      const video = videos[0];
+      const videoId = video.videoId;
 
-      // Envoyer le lien de la vidéo à Messenger
-      await sendMessage(senderId, { text: `Voici votre vidéo : ${videoUrl}` }, pageAccessToken);
+      // Télécharger la vidéo
+      const downloadUrl = `https://api-improve-production.up.railway.app/yt/download?url=https://www.youtube.com/watch?v=${videoId}&format=mp4&quality=360`;
+
+      const downloadResponse = await axios.get(downloadUrl);
+      const videoUrl = downloadResponse.data.video;
+
+      if (!videoUrl) {
+        throw new Error("URL de la vidéo introuvable.");
+      }
+
+      // Envoi de la vidéo en message
+      await sendMessage(senderId, {
+        attachment: {
+          type: "video",
+          payload: { url: videoUrl }
+        }
+      }, pageAccessToken);
     } catch (error) {
-      console.error('Erreur:', error);
-      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue lors du traitement de votre demande.' }, pageAccessToken);
+      console.error('Erreur lors du téléchargement ou de l\'envoi de la vidéo:', error.message);
+      await sendMessage(senderId, { text: "Erreur lors du téléchargement ou de l'envoi de la vidéo." }, pageAccessToken);
     }
   }
 };
