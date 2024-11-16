@@ -28,7 +28,7 @@ module.exports = {
 
     } catch (error) {
       console.error('Erreur lors de la requête à Gemini :', error);
-      await sendMessage(senderId, { text: 'Erreur lors de l\'utilisation de Gemini.' }, pageAccessToken);
+      await sendMessage(senderId, { text: 'Tapez le bouton menu pour quitter la réponse de gemini google ai et passer à une autre IA 🚫 ou poser votre question si vous voulez continuer avec gemini. 🤖' }, pageAccessToken);
     }
   }
 };
