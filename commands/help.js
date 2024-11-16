@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-  name: 'help',
+  name: 'menu',
   description: 'Afficher les commandes disponibles',
   author: 'System',
   execute(senderId, args, pageAccessToken, sendMessage) {
@@ -26,13 +26,14 @@ module.exports = {
         try {
           const command = require(path.join(commandsDir, file));
 
-          // Vérifie que la commande a bien un nom et une description
-          if (!command.name || !command.description) {
+          // Vérifie que la commande a bien un nom
+          if (!command.name) {
             commands.push(`❌ La commande dans le fichier ${file} est invalide.`);
             return null;
           }
 
-          commands.push(`🫣⚩  ${command.name.toUpperCase().padEnd(20, ' ')} ✬\n│⇨  Description : ${command.description}`);
+          // Formatage des commandes pour l'affichage sans description
+          commands.push(`╟ ${command.name.toUpperCase()}`);
 
           // Création d'un bouton Quick Reply pour chaque commande
           return {
@@ -48,13 +49,12 @@ module.exports = {
       }).filter(Boolean); // Filtre les valeurs nulles
 
       const helpMessage = `
-╭──────✯──────╮
-│🇲🇬 Commandes Disponibles 📜 
-├───────♨──────
-${commands.join('\n─────★─────\n')}
-│ 📌 Nombre total de commandes : ${commandFiles.length} │
-│ 💡 Utilisez le nom de la commande pour plus de détails ! │
-╰──────✨──────╯`;
+╔══════════════╗
+║ 📜 Commandes Disponibles ║
+╟──────────────╢
+╟${commands.join('\n╟─────────────\n')}
+╚══════════════╝
+💡 Nombre total de commandes : ${commandFiles.length}`;
 
       sendMessage(senderId, { 
         text: helpMessage, 
