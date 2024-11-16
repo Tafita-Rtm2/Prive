@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gpt4o',
+  name: 'claude-aiv3',
   description: 'Pose une question à l\'API Haiku et obtient la réponse.',
   author: 'ArYAN',
   
@@ -14,13 +14,13 @@ module.exports = {
 
     try {
       // Envoyer un message indiquant que l'IA réfléchit
-      const thinkingMessage = await sendMessage(senderId, { text: '🤔 Haiku réfléchit ⏳...' }, pageAccessToken);
+      const thinkingMessage = await sendMessage(senderId, { text: '✔claude v3 réfléchit ⏳...' }, pageAccessToken);
 
       // Appeler l'API pour obtenir la réponse
       const response = await callHaikuAPI(query);
 
       // Envoyer la réponse formatée
-      const formattedResponse = `📝 | Résultat Haiku\n━━━━━━━━━━━━━━━━\n${response}\n━━━━━━━━━━━━━━━━`;
+      const formattedResponse = `📝 | Résultat Haiku v3\n━━━━━━━━━━━━━━━━\n${response}\n━━━━━━━━━━━━━━━━`;
       await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
 
       // Supprimer le message d'attente
@@ -28,7 +28,7 @@ module.exports = {
 
     } catch (error) {
       console.error('Erreur lors de la requête à l\'IA :', error);
-      await sendMessage(senderId, { text: 'Erreur lors de l\'utilisation de l\'IA.' }, pageAccessToken);
+      await sendMessage(senderId, { text: 'taper le bouton menu pour quiter la reponse de claude et passe a une autre ia 🚫.' }, pageAccessToken);
     }
   }
 };
