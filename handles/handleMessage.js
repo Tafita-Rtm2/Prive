@@ -53,7 +53,7 @@ async function handleMessage(event, pageAccessToken) {
     // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Veuillez cliquer sur le bouton Menu pour explorer les commandes disponibles ou choisir l'intelligence artificielle que vous souhaitez utiliser pour vous répondre. 🤖📋 " }, pageAccessToken);
       return;
     }
 
@@ -77,7 +77,7 @@ async function handleMessage(event, pageAccessToken) {
           await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖 Tapez 'menu' pour quitter 🚫 ou cliquez sur le bouton Menu. Si vous souhaitez continuer, saisissez votre question et envoyez-la-moi pour obtenir une réponse. 📝.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
