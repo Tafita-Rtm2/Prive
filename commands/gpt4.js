@@ -1,74 +1,49 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gemini',
-  description: 'Pose une question à l’API Gemini textuelle',
-  author: 'Adapté par votre assistant',
+  name: 'haiku',
+  description: 'Pose une question à l\'API Haiku et obtient une réponse.',
+  author: 'ArYAN',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    const prompt = args.join(' ').trim();
+    const query = args.join(' ');
 
-    if (!prompt) {
-      return sendMessage(senderId, { 
-        text: "❓ Vous utilisez la commande Gemini. Veuillez entrer une question ou une demande pour obtenir une réponse de l'intelligence artificielle." 
-      }, pageAccessToken);
+    if (!query) {
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
-    // Informer l'utilisateur que l'IA est en train de répondre
-    await sendMessage(senderId, { 
-      text: '💬 Gemini est en train de répondre à votre question ⏳...\n─────★─────' 
-    }, pageAccessToken);
-
     try {
-      // Appel à l'API textuelle de Gemini
-      const response = await callGeminiTextAPI(prompt);
+      // Envoyer un message indiquant que l'IA réfléchit
+      const thinkingMessage = await sendMessage(senderId, { text: '🪐 Haiku réfléchit ⏳... 🤔' }, pageAccessToken);
 
-      if (!response || response.trim() === '') {
-        throw new Error("L'API Gemini a renvoyé une réponse vide.");
-      }
+      // Appel à l'API Haiku
+      const response = await callHaikuAPI(query);
 
-      const formattedResponse = formatResponse(response);
-      await handleLongResponse(formattedResponse, senderId, pageAccessToken, sendMessage);
+      // Envoyer la réponse formatée
+      const formattedResponse = `🖋️ | Haiku AI:\n━━━━━━━━━━━━━━━━\n${response}\n━━━━━━━━━━━━━━━━`;
+      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+
+      // Supprimer le message d'attente
+      await thinkingMessage.delete();
 
     } catch (error) {
-      console.error("Erreur avec l'API Gemini:", error);
-      await sendMessage(senderId, { 
-        text: 'Désolé, je n’ai pas pu obtenir de réponse pour cette question. Veuillez réessayer plus tard.' 
-      }, pageAccessToken);
+      console.error('Erreur lors de la requête à l\'API Haiku :', error);
+      await sendMessage(senderId, { text: 'Erreur lors de l\'utilisation de l\'IA.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour appeler l'API textuelle de Gemini
-async function callGeminiTextAPI(prompt) {
-  const apiUrl = `https://api.ruii.site/api/gemini?q=${encodeURIComponent(prompt)}`;
-  const response = await axios.get(apiUrl);
-  return response.data?.response || ""; // Adaptez selon la structure de la réponse API
-}
-
-// Fonction pour formater la réponse avec un style personnalisé
-function formatResponse(text) {
-  return `─────★─────\n✨ Gemini 🤖\n\n${text}\n─────★─────`;
-}
-
-// Fonction pour découper les messages longs en morceaux de 2000 caractères
-function splitMessageIntoChunks(message, chunkSize) {
-  const chunks = [];
-  for (let i = 0; i < message.length; i += chunkSize) {
-    chunks.push(message.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
-
-// Fonction pour gérer les messages longs
-async function handleLongResponse(response, senderId, pageAccessToken, sendMessage) {
-  const maxMessageLength = 2000;
-  if (response.length > maxMessageLength) {
-    const messages = splitMessageIntoChunks(response, maxMessageLength);
-    for (const message of messages) {
-      await sendMessage(senderId, { text: message }, pageAccessToken);
+// Fonction pour appeler l'API Haiku
+async function callHaikuAPI(prompt) {
+  const apiUrl = `https://api.ruii.site/api/haiku?q=${encodeURIComponent(prompt)}`;
+  try {
+    const response = await axios.get(apiUrl);
+    if (response.data && response.data.answer) {
+      return response.data.answer;
     }
-  } else {
-    await sendMessage(senderId, { text: response }, pageAccessToken);
+    throw new Error('Réponse invalide de l\'API Haiku');
+  } catch (error) {
+    console.error('Erreur lors de l\'appel à l\'API Haiku:', error.message);
+    throw new Error('Impossible de contacter l\'API Haiku.');
   }
 }
