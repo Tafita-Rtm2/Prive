@@ -19,9 +19,12 @@ module.exports = {
       // Appeler l'API pour obtenir la réponse
       const response = await callGpt4oAPI(query);
 
-      // Envoyer la réponse formatée
-      const formattedResponse = `🌐 | Résultat GPT4O\n━━━━━━━━━━━━━━━━\n${response}\n━━━━━━━━━━━━━━━━`;
-      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      // Diviser et envoyer la réponse par morceaux de 500 mots
+      const chunks = splitResponseIntoChunks(response, 500);
+      for (const chunk of chunks) {
+        const formattedResponse = `🌐 | Résultat GPT4O\n━━━━━━━━━━━━━━━━\n${chunk}\n━━━━━━━━━━━━━━━━`;
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      }
 
       // Supprimer le message d'attente
       await thinkingMessage.delete();
@@ -47,4 +50,25 @@ async function callGpt4oAPI(prompt) {
     console.error('Erreur lors de l\'appel à l\'API GPT4O:', error.message);
     throw new Error('Impossible de contacter l\'API GPT4O.');
   }
+}
+
+// Fonction pour diviser une réponse en morceaux de 500 mots
+function splitResponseIntoChunks(response, wordLimit) {
+  const words = response.split(' ');
+  const chunks = [];
+  let currentChunk = [];
+
+  for (const word of words) {
+    if ((currentChunk.join(' ').split(' ').length + 1) > wordLimit) {
+      chunks.push(currentChunk.join(' '));
+      currentChunk = [];
+    }
+    currentChunk.push(word);
+  }
+
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk.join(' '));
+  }
+
+  return chunks;
 }
