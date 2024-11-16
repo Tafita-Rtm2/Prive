@@ -15,17 +15,22 @@ module.exports = {
 
     // Validation de la recherche utilisateur
     if (!query.trim()) {
-      await sendMessage(senderId, { text: "Veuillez fournir un titre ou des mots-clés pour rechercher une vidéo." }, pageAccessToken);
+      await sendMessage(senderId, { text: "❌ Veuillez fournir un titre ou des mots-clés pour rechercher une vidéo." }, pageAccessToken);
       return;
     }
 
     try {
+      // Informer l'utilisateur que le téléchargement est en cours
+      await sendMessage(senderId, { 
+        text: "📥 Votre vidéo est en cours de téléchargement. Veuillez patienter un instant... ⏳" 
+      }, pageAccessToken);
+
       // Recherche de vidéos YouTube en fonction de l'entrée utilisateur
       const searchResponse = await axios.get(`https://me0xn4hy3i.execute-api.us-east-1.amazonaws.com/staging/api/resolve/resolveYoutubeSearch?search=${encodeURIComponent(query)}`);
       const videos = searchResponse.data.data;
 
       if (!videos || videos.length === 0) {
-        await sendMessage(senderId, { text: "Aucune vidéo trouvée pour votre recherche." }, pageAccessToken);
+        await sendMessage(senderId, { text: "❌ Aucune vidéo trouvée pour votre recherche." }, pageAccessToken);
         return;
       }
 
@@ -50,9 +55,10 @@ module.exports = {
           payload: { url: videoUrl }
         }
       }, pageAccessToken);
+
     } catch (error) {
       console.error('Erreur lors du téléchargement ou de l\'envoi de la vidéo:', error.message);
-      await sendMessage(senderId, { text: "Erreur lors du téléchargement ou de l'envoi de la vidéo." }, pageAccessToken);
+      await sendMessage(senderId, { text: "❌ Une erreur est survenue lors du téléchargement ou de l'envoi de la vidéo. Veuillez réessayer plus tard. 🙁" }, pageAccessToken);
     }
   }
 };
