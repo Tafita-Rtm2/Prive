@@ -54,7 +54,9 @@ module.exports = {
 ╟──────────────╢
 ╟${commands.join('\n╟─────────────\n')}
 ╚══════════════╝
-💡 Nombre total de commandes : ${commandFiles.length}`;
+💡 Nombre total de commandes : ${commandFiles.length}
+
+Veuillez cliquer sur l'un des boutons ci-dessous pour sélectionner l'intelligence artificielle que vous souhaitez utiliser. 🤖👇`;
 
       sendMessage(senderId, { 
         text: helpMessage, 
