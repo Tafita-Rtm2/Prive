@@ -21,7 +21,7 @@ module.exports = {
 
     try {
       // Appel à l'API textuelle de Gemini
-      const response = await callGeminiTextAPI(prompt, senderId);
+      const response = await callGeminiTextAPI(prompt);
 
       if (!response || response.trim() === '') {
         throw new Error("L'API Gemini a renvoyé une réponse vide.");
@@ -40,10 +40,10 @@ module.exports = {
 };
 
 // Fonction pour appeler l'API textuelle de Gemini
-async function callGeminiTextAPI(prompt, senderId) {
-  const apiUrl = `https://gemini-ai-pearl-two.vercel.app/kshitiz?prompt=${encodeURIComponent(prompt)}&uid=${senderId}&apikey=kshitiz`;
+async function callGeminiTextAPI(prompt) {
+  const apiUrl = `https://api.ruii.site/api/gemini?q=${encodeURIComponent(prompt)}`;
   const response = await axios.get(apiUrl);
-  return response.data?.answer || "";
+  return response.data?.response || ""; // Adaptez selon la structure de la réponse API
 }
 
 // Fonction pour formater la réponse avec un style personnalisé
