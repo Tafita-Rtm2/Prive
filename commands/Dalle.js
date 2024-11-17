@@ -1,72 +1,83 @@
 const axios = require('axios');
+const path = require('path');
 
 module.exports = {
-  name: 'chatgpt4-o',
-  description: 'Pose une question à l\'API GPT4O et obtient la réponse.',
-  author: 'ArYAN',
-
+  name: '4o',
+  description: 'Pose une question à GPT-4o webscrapers ou répond à une image.',
+  author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    const query = args.join(' ');
+    const prompt = args.join(' ');
 
-    if (!query) {
-      return sendMessage(senderId, { text: "❌ Veuillez entrer une question valide." }, pageAccessToken);
+    if (!prompt) {
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que l'IA réfléchit
-      await sendMessage(senderId, { text: '🤖 GPT4O réfléchit ⏳ Patientez un instant...' }, pageAccessToken);
+      // Envoyer un message indiquant que GPT-4 est en train de répondre
+      await sendMessage(senderId, { text: '💬 GPT-4o webscrapers est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Appeler l'API pour obtenir la réponse
-      const response = await callGpt4oAPI(query);
+      // Si le message auquel on répond contient une image
+      if (args.length === 0) {
+        const repliedMessage = await fetchRepliedMessage(senderId, pageAccessToken); // Fonction simulée pour obtenir le message répondu
+        if (repliedMessage && repliedMessage.attachments && repliedMessage.attachments[0].type === 'image') {
+          const imageUrl = repliedMessage.attachments[0].url;
+          const query = "Décris cette image.";
+          await handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken);
+          return;
+        }
+      }
 
-      // Diviser et envoyer la réponse par morceaux de 500 mots
-      const chunks = splitResponseIntoChunks(response, 500);
-      for (const chunk of chunks) {
-        const formattedResponse = `🌐 | Résultat GPT4O\n━━━━━━━━━━━━━━━━\n${chunk}\n━━━━━━━━━━━━━━━━`;
+      // URL pour appeler l'API GPT-4o avec une question
+      const apiUrl = `https://joshweb.click/api/gpt-4o?q=${encodeURIComponent(prompt)}&uid=100${senderId}`;
+      const response = await axios.get(apiUrl);
+
+      const text = response.data.result;
+
+      // Créer un style avec un contour pour la réponse de GPT-4
+      const formattedResponse = `─────★─────\n` +
+                                `✨GPT-4o webscrapers\n\n${text}\n` +
+                                `─────★─────`;
+
+      // Gérer les réponses longues de plus de 2000 caractères
+      const maxMessageLength = 2000;
+      if (formattedResponse.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+        for (const message of messages) {
+          await sendMessage(senderId, { text: message }, pageAccessToken);
+        }
+      } else {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
+
     } catch (error) {
-      console.error('Erreur lors de la requête à l\'IA :', error);
-      await sendMessage(senderId, {
-        text: "❌ Une erreur est survenue lors du traitement de votre demande. Veuillez réessayer plus tard. 🙁"
-      }, pageAccessToken);
+      console.error('Error calling GPT-4 API:', error);
+      // Message de réponse d'erreur
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour appeler l'API GPT4O
-async function callGpt4oAPI(prompt) {
-  const apiUrl = `https://api.kenliejugarap.com/blackbox-gpt4o/?text=${encodeURIComponent(prompt)}`;
+// Fonction pour gérer les images
+async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
   try {
-    const response = await axios.get(apiUrl);
-    console.log('Réponse brute de l\'API:', response.data);
-    if (response.data && response.data.message) {
-      return response.data.message; // Extraire la propriété `message` de la réponse
-    }
-    throw new Error('La réponse de l\'API ne contient pas "message"');
+    const apiUrl = `https://deku-rest-apis.ooguy.com/gemini?prompt=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
+    const { data } = await axios.get(apiUrl);
+    const formattedResponse = `─────★─────\n` +
+                              `✨GPT-4o Image🤖🇲🇬\n\n${data.gemini}\n` +
+                              `─────★─────`;
+
+    await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
   } catch (error) {
-    console.error('Erreur lors de l\'appel à l\'API GPT4O:', error.message);
-    throw new Error('Impossible de contacter l\'API GPT4O.');
+    console.error('Error handling image:', error);
+    await sendMessage(senderId, { text: "Désolé, je n'ai pas pu analyser l'image." }, pageAccessToken);
   }
 }
 
-// Fonction pour diviser une réponse en morceaux de 500 mots
-function splitResponseIntoChunks(response, wordLimit) {
-  const words = response.split(' ');
+// Fonction pour découper les messages en morceaux de 2000 caractères
+function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
-  let currentChunk = [];
-
-  for (const word of words) {
-    if ((currentChunk.join(' ').split(' ').length + 1) > wordLimit) {
-      chunks.push(currentChunk.join(' '));
-      currentChunk = [];
-    }
-    currentChunk.push(word);
+  for (let i = 0; i < message.length; i += chunkSize) {
+    chunks.push(message.slice(i, i + chunkSize));
   }
-
-  if (currentChunk.length > 0) {
-    chunks.push(currentChunk.join(' '));
-  }
-
   return chunks;
 }
