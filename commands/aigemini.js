@@ -1,50 +1,83 @@
 const axios = require('axios');
+const path = require('path');
 
 module.exports = {
-  name: 'gemini',
-  description: 'Pose une question à l\'API Gemini et obtient une réponse.',
-  author: 'ArYAN',
-
+  name: 'Gemini',
+  description: 'Pose une question à GPT-4o webscrapers ou répond à une image.',
+  author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    const query = args.join(' ');
+    const prompt = args.join(' ');
 
-    if (!query) {
+    if (!prompt) {
       return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que l'IA réfléchit
-      const thinkingMessage = await sendMessage(senderId, { text: '🌌 Gemini réfléchit ⏳...' }, pageAccessToken);
+      // Envoyer un message indiquant que GPT-4 est en train de répondre
+      await sendMessage(senderId, { text: '💬 gemini est en train de te repondre...\n\n─────★─────' }, pageAccessToken);
 
-      // Appeler l'API pour obtenir la réponse
-      const response = await callGeminiAPI(query);
+      // Si le message auquel on répond contient une image
+      if (args.length === 0) {
+        const repliedMessage = await fetchRepliedMessage(senderId, pageAccessToken); // Fonction simulée pour obtenir le message répondu
+        if (repliedMessage && repliedMessage.attachments && repliedMessage.attachments[0].type === 'image') {
+          const imageUrl = repliedMessage.attachments[0].url;
+          const query = "Décris cette image.";
+          await handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken);
+          return;
+        }
+      }
 
-      // Envoyer la réponse formatée
-      const formattedResponse = `✨ | Résultat Gemini\n━━━━━━━━━━━━━━━━\n${response}\n━━━━━━━━━━━━━━━━`;
-      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      // URL pour appeler l'API GPT-4o avec une question
+      const apiUrl = `https://joshweb.click/gemini?prompt=${encodeURIComponent(prompt)}&uid=100${senderId}`;
+      const response = await axios.get(apiUrl);
 
-      // Supprimer le message d'attente
-      await thinkingMessage.delete();
+      const text = response.data.result;
+
+      // Créer un style avec un contour pour la réponse de GPT-4
+      const formattedResponse = `─────★─────\n` +
+                                `✨gemini😇\n${text}\n` +
+                                `─────★─────`;
+
+      // Gérer les réponses longues de plus de 2000 caractères
+      const maxMessageLength = 2000;
+      if (formattedResponse.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+        for (const message of messages) {
+          await sendMessage(senderId, { text: message }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      }
 
     } catch (error) {
-      console.error('Erreur lors de la requête à Gemini :', error);
-      await sendMessage(senderId, { text: 'Tapez le bouton menu pour quitter la réponse de gemini google ai et passer à une autre IA 🚫 ou poser votre question si vous voulez continuer avec gemini. 🤖' }, pageAccessToken);
+      console.error('Error calling GPT-4 API:', error);
+      // Message de réponse d'erreur
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour appeler l'API Gemini
-async function callGeminiAPI(prompt) {
-  const apiUrl = `https://api.ruii.site/api/gemini?q=${encodeURIComponent(prompt)}`;
+// Fonction pour gérer les images
+async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
   try {
-    const response = await axios.get(apiUrl);
-    console.log('Réponse brute de l\'API:', response.data);
-    if (response.data && response.data.message) {
-      return response.data.message; // Extraire la propriété `message` de la réponse
-    }
-    throw new Error('La réponse de l\'API ne contient pas "message"');
+    const apiUrl = `https://joshweb.click/api/gpt-4o?q=hi&uid=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
+    const { data } = await axios.get(apiUrl);
+    const formattedResponse = `─────★─────\n` +
+                              `✨GPT-4o Image🤖🇲🇬\n\n${data.gemini}\n` +
+                              `─────★─────`;
+
+    await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
   } catch (error) {
-    console.error('Erreur lors de l\'appel à l\'API Gemini:', error.message);
-    throw new Error('Impossible de contacter l\'API Gemini.');
+    console.error('Error handling image:', error);
+    await sendMessage(senderId, { text: "Désolé, je n'ai pas pu analyser l'image." }, pageAccessToken);
   }
+}
+
+// Fonction pour découper les messages en morceaux de 2000 caractères
+function splitMessageIntoChunks(message, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += chunkSize) {
+    chunks.push(message.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
