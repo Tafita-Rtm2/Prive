@@ -14,7 +14,7 @@ module.exports = {
 
     try {
       // Envoyer un message indiquant que GPT-4 est en train de répondre
-      await sendMessage(senderId, { text: '💬 gemini est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(senderId, { text: '☑meta ai est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
       // Si le message auquel on répond contient une image
       if (args.length === 0) {
@@ -35,7 +35,7 @@ module.exports = {
 
       // Créer un style avec un contour pour la réponse de GPT-4
       const formattedResponse = `─────★─────\n` +
-                                `✨Gemini ai\n\n${text}\n` +
+                                `✨Meta ai ✔\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues de plus de 2000 caractères
