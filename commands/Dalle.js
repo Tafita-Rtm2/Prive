@@ -38,7 +38,7 @@ module.exports = {
 
 // Fonction pour appeler l'API GPT4O
 async function callGpt4oAPI(prompt) {
-  const apiUrl = `https://api.ruii.site/api/gpt4o?q=${encodeURIComponent(prompt)}`;
+  const apiUrl = `https://api.kenliejugarap.com/blackbox-gpt4o/?text=${encodeURIComponent(prompt)}`;
   try {
     const response = await axios.get(apiUrl);
     console.log('Réponse brute de l\'API:', response.data);
