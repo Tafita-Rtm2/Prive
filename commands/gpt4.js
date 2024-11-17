@@ -35,7 +35,7 @@ module.exports = {
 
 // Fonction pour appeler l'API Haiku
 async function callHaikuAPI(prompt) {
-  const apiUrl = `https://api.ruii.site/api/haiku?q=${encodeURIComponent(prompt)}`;
+  const apiUrl = `https://api.kenliejugarap.com/blackbox-claude/?text=${encodeURIComponent(prompt)}`;
   try {
     const response = await axios.get(apiUrl);
     console.log('Réponse brute de l\'API:', response.data);
