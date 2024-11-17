@@ -41,11 +41,11 @@ async function handleMessage(event, pageAccessToken) {
       }, pageAccessToken);
 
       // Exécution automatique de la commande "help" après validation
-      const helpCommand = commands.get('menu');
+      const helpCommand = commands.get('help');
       if (helpCommand) {
         await helpCommand.execute(senderId, [], pageAccessToken, sendMessage);
       } else {
-        await sendMessage(senderId, { text: "❌ La commande 'menu' n'est pas disponible." }, pageAccessToken);
+        await sendMessage(senderId, { text: "❌ La commande 'help' n'est pas disponible." }, pageAccessToken);
       }
       return;
     }
@@ -53,7 +53,7 @@ async function handleMessage(event, pageAccessToken) {
     // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Veuillez cliquer sur le bouton Menu pour explorer les commandes disponibles ou choisir l'intelligence artificielle que vous souhaitez utiliser pour vous répondre. 🤖📋 " }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
       return;
     }
 
@@ -77,7 +77,7 @@ async function handleMessage(event, pageAccessToken) {
           await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖 Tapez 'menu' pour quitter 🚫 ou cliquez sur le bouton Menu. Si vous souhaitez continuer, saisissez votre question et envoyez-la-moi pour obtenir une réponse. 📝.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
@@ -93,7 +93,7 @@ async function handleMessage(event, pageAccessToken) {
       }
     } else {
       // Sinon, traiter comme texte générique ou commande non reconnue
-      await sendMessage(senderId, { text: "❌ Désolé, je n'ai pas pu traiter votre demande. Veuillez essayer une commande valide, taper 'menu', ou cliquer sur le bouton Menu pour choisir l'intelligence artificielle qui répondra à vos besoins. 🤖✨." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
     }
   }
 }
@@ -130,8 +130,9 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
   const geminiApiEndpoint = 'https://joshweb.click/gemini';
 
   try {
-    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
-    return response.data && response.data.answer ? response.data.answer : '';
+    const apiUrl = `${geminiApiEndpoint}?prompt=${encodeURIComponent(prompt)}&url=${encodeURIComponent(imageUrl)}`;
+    const response = await axios.get(apiUrl);
+    return response.data && response.data.answer ? response.data.answer : 'Aucune réponse valable trouvée.';
   } catch (error) {
     console.error('Erreur avec Gemini :', error);
     throw new Error('Erreur lors de l\'analyse avec Gemini');
