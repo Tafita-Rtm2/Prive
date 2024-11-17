@@ -127,7 +127,7 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
 
 // Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
 async function analyzeImageWithGemini(imageUrl, prompt) {
-  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
+  const geminiApiEndpoint = 'https://joshweb.click/gemini';
 
   try {
     const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
