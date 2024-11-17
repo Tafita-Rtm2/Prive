@@ -60,7 +60,7 @@ module.exports = {
 // Fonction pour gérer les images
 async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
   try {
-    const apiUrl = `https://joshweb.click/api/gpt-4o?q=hi&uid=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
+    const apiUrl = `https://joshweb.click/new/gemini?prompt=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
     const { data } = await axios.get(apiUrl);
     const formattedResponse = `─────★─────\n` +
                               `✨GPT-4o Image🤖🇲🇬\n\n${data.gemini}\n` +
