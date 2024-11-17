@@ -2,7 +2,7 @@ const axios = require('axios');
 const path = require('path');
 
 module.exports = {
-  name: 'gemini',
+  name: 'meta-Ai',
   description: 'Pose une question à GPT-4o webscrapers ou répond à une image.',
   author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -28,7 +28,7 @@ module.exports = {
       }
 
       // URL pour appeler l'API GPT-4o avec une question
-      const apiUrl = `https://api.kenliejugarap.com/blackbox-gemini/?text=${encodeURIComponent(prompt)}&uid=100${senderId}`;
+      const apiUrl = `https://joshweb.click/ai/llama-3-8b?q=${encodeURIComponent(prompt)}&uid=100${senderId}`;
       const response = await axios.get(apiUrl);
 
       const text = response.data.result;
@@ -60,7 +60,7 @@ module.exports = {
 // Fonction pour gérer les images
 async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
   try {
-    const apiUrl = `https://api.kenliejugarap.com/blackbox-gemini/?text=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
+    const apiUrl = `https://joshweb.click/ai/llama-3-8b?q=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
     const { data } = await axios.get(apiUrl);
     const formattedResponse = `─────★─────\n` +
                               `✨gemini 🤖🇲🇬\n\n${data.gemini}\n` +
