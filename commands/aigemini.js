@@ -2,7 +2,7 @@ const axios = require('axios');
 const path = require('path');
 
 module.exports = {
-  name: 'chatgpt4-o',
+  name: 'gemini',
   description: 'Pose une question à GPT-4o webscrapers ou répond à une image.',
   author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -14,7 +14,7 @@ module.exports = {
 
     try {
       // Envoyer un message indiquant que GPT-4 est en train de répondre
-      await sendMessage(senderId, { text: '💬 GPT-4o webscrapers est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(senderId, { text: '💬 gemini est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
       // Si le message auquel on répond contient une image
       if (args.length === 0) {
@@ -28,14 +28,14 @@ module.exports = {
       }
 
       // URL pour appeler l'API GPT-4o avec une question
-      const apiUrl = `https://joshweb.click/new/gemini?prompt=assistancevirtuelle${encodeURIComponent(prompt)}&uid=100${senderId}`;
+      const apiUrl = `https://api.kenliejugarap.com/blackbox-gemini/?text=${encodeURIComponent(prompt)}&uid=100${senderId}`;
       const response = await axios.get(apiUrl);
 
       const text = response.data.result;
 
       // Créer un style avec un contour pour la réponse de GPT-4
       const formattedResponse = `─────★─────\n` +
-                                `✨GPT-4o webscrapers\n\n${text}\n` +
+                                `✨Gemini ai\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues de plus de 2000 caractères
@@ -60,10 +60,10 @@ module.exports = {
 // Fonction pour gérer les images
 async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
   try {
-    const apiUrl = `https://joshweb.click/api/gpt-4o?q=hi&uid=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
+    const apiUrl = `https://api.kenliejugarap.com/blackbox-gemini/?text=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
     const { data } = await axios.get(apiUrl);
     const formattedResponse = `─────★─────\n` +
-                              `✨GPT-4o Image🤖🇲🇬\n\n${data.gemini}\n` +
+                              `✨gemini 🤖🇲🇬\n\n${data.gemini}\n` +
                               `─────★─────`;
 
     await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
