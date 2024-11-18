@@ -27,7 +27,7 @@ module.exports = {
     imageCount = Math.max(1, Math.min(imageCount, 20));
 
     try {
-      const { data } = await axios.get(`https://api.kenliejugarap.com/flux-realism-v2/?prompt=${encodeURIComponent(searchQuery)}`);
+      const { data } = await axios.get(`https://hiroshi-api.onrender.com/image/pinterest?search=${encodeURIComponent(searchQuery)}`);
 
       // Limit the number of images to the user-requested count
       const selectedImages = data.data.slice(0, imageCount);
