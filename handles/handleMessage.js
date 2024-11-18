@@ -23,12 +23,15 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Vérifier si l'utilisateur est abonné
-  const isSubscribed = checkSubscription(senderId);
+  // Vérifier l'abonnement de l'utilisateur ou sa limite de questions gratuites
+  if (!isUserAllowed(senderId)) {
+    await sendMessage(senderId, {
+      text: "🚫 Vous avez atteint votre limite de questions gratuites pour aujourd'hui ou vous n'êtes pas abonné. Veuillez entrer un code d'abonnement valide pour continuer."
+    }, pageAccessToken);
+    return;
+  }
 
-  // Vérifier si l'utilisateur a atteint sa limite de questions gratuites
-  const freeQuestionsLeft = checkFreeQuestions(senderId);
-
+  // Gestion des messages envoyés par l'utilisateur
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
@@ -67,17 +70,8 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Gestion des questions gratuites si l'utilisateur n'est pas abonné
-    if (!isSubscribed) {
-      if (freeQuestionsLeft <= 0) {
-        await sendMessage(senderId, {
-          text: "🚫 Vous avez atteint votre limite de 2 questions gratuites pour aujourd'hui. Veuillez vous abonner pour continuer à utiliser nos services."
-        }, pageAccessToken);
-        return;
-      } else {
-        updateFreeQuestions(senderId); // Décompte une question gratuite
-      }
-    }
+    // Gestion des questions gratuites pour les utilisateurs non abonnés
+    updateFreeQuestions(senderId);
 
     // Vérifier si l'utilisateur est en mode d'analyse d'image
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
@@ -118,6 +112,19 @@ async function handleMessage(event, pageAccessToken) {
       await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
     }
   }
+}
+
+// Fonction pour vérifier si un utilisateur est autorisé (abonné ou dans la limite gratuite)
+function isUserAllowed(senderId) {
+  const isSubscribed = checkSubscription(senderId);
+
+  if (isSubscribed) {
+    return true; // Utilisateur abonné, aucune limite
+  }
+
+  // Vérifier les questions gratuites restantes
+  const freeQuestionsLeft = checkFreeQuestions(senderId);
+  return freeQuestionsLeft > 0;
 }
 
 // Fonction pour vérifier l'abonnement de l'utilisateur
