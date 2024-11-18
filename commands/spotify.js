@@ -1,59 +1,64 @@
 const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
-const path = require('path');
+
+// Lecture du token d'accès pour l'envoi des messages
+const token = fs.readFileSync('token.txt', 'utf8');
+
+// Dictionnaire pour suivre le dernier horodatage de chaque utilisateur
+const lastUsage = {};
 
 module.exports = {
-  name: 'image-generator',
-  description: 'Génère une image à partir d\'un prompt et envoie le résultat.',
-  author: 'Deku (API Image Generator)',
-  async execute(senderId, args, pageAccessToken, sendMessage) {
-    const prompt = args.join(' ');
+  name: 'image',
+  description: 'Generate an AI-based image with a 2-minute cooldown',
+  author: 'Tafita',
+  usage: 'imagine dog',
 
+  async execute(senderId, args) {
+    const pageAccessToken = token;
+    const prompt = args.join(' ').trim();
+
+    // Vérifie que l'utilisateur a bien entré une commande
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez entrer un prompt valide pour générer une image." }, pageAccessToken);
+      return await sendMessage(senderId, { text: 'Veuillez fournir un prompt pour le générateur d\'images.' }, pageAccessToken);
     }
 
+    // Vérifier l'intervalle de 2 minutes pour cet utilisateur
+    const currentTime = Date.now();
+    const cooldownPeriod = 2 * 60 * 1000; // 2 minutes en millisecondes
+
+    if (lastUsage[senderId] && currentTime - lastUsage[senderId] < cooldownPeriod) {
+      const remainingTime = Math.ceil((cooldownPeriod - (currentTime - lastUsage[senderId])) / 1000);
+      return await sendMessage(senderId, { text: `Veuillez attendre encore ${remainingTime} secondes avant de réutiliser cette commande.` }, pageAccessToken);
+    }
+
+    // Mettre à jour le dernier horodatage d'utilisation de la commande
+    lastUsage[senderId] = currentTime;
+
     try {
-      // Envoyer un message indiquant que l'image est en cours de génération
-      await sendMessage(senderId, { text: '🖌️ Génération de votre image en cours⏳...\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message pour indiquer que l'image est en cours de génération
+      await sendMessage(senderId, { text: '🎨 Génération de votre image en cours...🤩' }, pageAccessToken);
 
       // Appel à l'API pour générer l'image
       const apiUrl = `https://joshweb.click/api/flux?prompt=${encodeURIComponent(prompt)}&model=4`;
-      const response = await axios.get(apiUrl, { responseType: 'stream' }); // Récupérer l'image en tant que flux
+      const response = await axios.get(apiUrl);
 
-      // Chemin temporaire pour enregistrer l'image
-      const tempImagePath = path.join(__dirname, `temp-${Date.now()}.jpg`);
+      // Vérifier si l'API a renvoyé un résultat valide
+      if (response.status === 200 && response.data && response.data.url) {
+        const imageUrl = response.data.url;
 
-      // Enregistrer l'image localement
-      const writer = fs.createWriteStream(tempImagePath);
-      response.data.pipe(writer);
-
-      // Attendre la fin de l'écriture de l'image
-      await new Promise((resolve, reject) => {
-        writer.on('finish', resolve);
-        writer.on('error', reject);
-      });
-
-      // Envoyer l'image à l'utilisateur
-      const imagePayload = {
-        attachment: {
-          type: 'image',
-          payload: {
-            is_reusable: true,
-            url: `file://${tempImagePath}`,
-          },
-        },
-      };
-
-      await sendMessage(senderId, imagePayload, pageAccessToken);
-
-      // Supprimer le fichier temporaire après l'envoi
-      fs.unlinkSync(tempImagePath);
-
+        // Envoyer l'image à l'utilisateur
+        await sendMessage(senderId, {
+          attachment: { type: 'image', payload: { url: imageUrl } }
+        }, pageAccessToken);
+      } else {
+        // Envoyer un message d'erreur si l'API ne renvoie pas d'URL
+        await sendMessage(senderId, { text: 'Échec de la génération de l\'image. Veuillez essayer un autre prompt.' }, pageAccessToken);
+      }
     } catch (error) {
-      console.error('Erreur lors de la génération de l\'image:', error);
-      // Envoyer un message d'erreur
-      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue lors de la génération de l\'image. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de la génération de l\'image :', error);
+      // Envoyer un message d'erreur à l'utilisateur
+      await sendMessage(senderId, { text: 'Une erreur inattendue est survenue lors de la génération de l\'image. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
-  },
+  }
 };
