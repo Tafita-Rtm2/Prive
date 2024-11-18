@@ -5,10 +5,12 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec expiration et statut de paiement
-const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes valides
-const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement par défaut : 30 jours
+const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs
+const userFreeQuestions = new Map(); // Suivi des questions gratuites par utilisateur (par jour)
+const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes d'abonnement valides
+const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours (en ms)
 const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
+const freeQuestionLimit = 2; // Limite de 2 questions gratuites par jour
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -24,6 +26,9 @@ async function handleMessage(event, pageAccessToken) {
   // Vérifier si l'utilisateur est abonné
   const isSubscribed = checkSubscription(senderId);
 
+  // Vérifier si l'utilisateur a atteint sa limite de questions gratuites
+  const freeQuestionsLeft = checkFreeQuestions(senderId);
+
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
@@ -35,10 +40,10 @@ async function handleMessage(event, pageAccessToken) {
     if (validCodes.includes(messageText)) {
       const expirationDate = Date.now() + subscriptionDuration;
 
-      // Enregistrer l'abonnement dans le système
-      userSubscriptions.set(senderId, { 
-        expirationDate, 
-        paymentVerified: true // On considère ici que le paiement est vérifié
+      // Enregistrer l'abonnement
+      userSubscriptions.set(senderId, {
+        expirationDate,
+        paymentVerified: true
       });
 
       await sendMessage(senderId, {
@@ -60,6 +65,18 @@ async function handleMessage(event, pageAccessToken) {
       userStates.delete(senderId);
       await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
       return;
+    }
+
+    // Gestion des questions gratuites si l'utilisateur n'est pas abonné
+    if (!isSubscribed) {
+      if (freeQuestionsLeft <= 0) {
+        await sendMessage(senderId, {
+          text: "🚫 Vous avez atteint votre limite de 2 questions gratuites pour aujourd'hui. Veuillez vous abonner pour continuer à utiliser nos services."
+        }, pageAccessToken);
+        return;
+      } else {
+        updateFreeQuestions(senderId); // Décompte une question gratuite
+      }
     }
 
     // Vérifier si l'utilisateur est en mode d'analyse d'image
@@ -103,46 +120,6 @@ async function handleMessage(event, pageAccessToken) {
   }
 }
 
-// Demander le prompt de l'utilisateur pour analyser l'image
-async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
-  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo ! 📸😊." }, pageAccessToken);
-}
-
-// Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
-async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
-  try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔⏳" }, pageAccessToken);
-
-    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
-
-    if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
-    } else {
-      await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
-    }
-
-    // Rester en mode d'analyse d'image tant que l'utilisateur ne tape pas "stop"
-    userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  } catch (error) {
-    console.error('Erreur lors de l\'analyse de l\'image :', error);
-    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
-  }
-}
-
-// Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
-async function analyzeImageWithGemini(imageUrl, prompt) {
-  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
-
-  try {
-    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
-    return response.data && response.data.answer ? response.data.answer : '';
-  } catch (error) {
-    console.error('Erreur avec Gemini :', error);
-    throw new Error('Erreur lors de l\'analyse avec Gemini');
-  }
-}
-
 // Fonction pour vérifier l'abonnement de l'utilisateur
 function checkSubscription(senderId) {
   const subscription = userSubscriptions.get(senderId);
@@ -155,6 +132,35 @@ function checkSubscription(senderId) {
   // Supprimer l'abonnement si expiré
   userSubscriptions.delete(senderId);
   return false;
+}
+
+// Fonction pour vérifier les questions gratuites disponibles
+function checkFreeQuestions(senderId) {
+  const today = new Date().toLocaleDateString(); // Clé basée sur la date
+  if (!userFreeQuestions.has(senderId)) {
+    userFreeQuestions.set(senderId, { [today]: freeQuestionLimit });
+    return freeQuestionLimit;
+  }
+
+  const userStats = userFreeQuestions.get(senderId);
+  if (!userStats[today]) {
+    userStats[today] = freeQuestionLimit;
+    return freeQuestionLimit;
+  }
+
+  return userStats[today];
+}
+
+// Fonction pour réduire les questions gratuites restantes
+function updateFreeQuestions(senderId) {
+  const today = new Date().toLocaleDateString();
+  if (!userFreeQuestions.has(senderId)) {
+    userFreeQuestions.set(senderId, { [today]: freeQuestionLimit - 1 });
+  } else {
+    const userStats = userFreeQuestions.get(senderId);
+    userStats[today] = (userStats[today] || freeQuestionLimit) - 1;
+    userFreeQuestions.set(senderId, userStats);
+  }
 }
 
 module.exports = { handleMessage };
