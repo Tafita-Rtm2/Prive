@@ -1,62 +1,44 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
-const fs = require('fs');
-
-// Lecture du token d'accès pour l'envoi des messages
-const token = fs.readFileSync('token.txt', 'utf8');
-
-// Dictionnaire pour suivre le dernier horodatage de chaque utilisateur
-const lastUsage = {};
 
 module.exports = {
-  name: 'imagine',
-  description: 'Generate an AI-based image with a 2-minute cooldown',
-  author: 'Tata',
-  usage:'imagine dog',
+  name: 'imagegen',
+  description: 'Génère une image à partir d’un prompt fourni.',
+  async execute(senderId, args, pageAccessToken, sendMessage) {
+    const prompt = args.join(' ');
 
-  async execute(senderId, args) {
-    const pageAccessToken = token;
-    const prompt = args.join(' ').trim();
-
-    // Vérifie que l'utilisateur a bien entré une commande
     if (!prompt) {
-      return await sendMessage(senderId, { text: 'Please provide a prompt for the image generator.' }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez fournir une description pour générer une image." }, pageAccessToken);
     }
-
-    // Vérifier l'intervalle de 2 minutes pour cet utilisateur
-    const currentTime = Date.now();
-    const cooldownPeriod = 2 * 60 * 1000; // 2 minutes en millisecondes
-
-    if (lastUsage[senderId] && currentTime - lastUsage[senderId] < cooldownPeriod) {
-      const remainingTime = Math.ceil((cooldownPeriod - (currentTime - lastUsage[senderId])) / 1000);
-      return await sendMessage(senderId, { text: `Please wait ${remainingTime} seconds before using this command again.` }, pageAccessToken);
-    }
-
-    // Mettre à jour le dernier horodatage d'utilisation de la commande
-    lastUsage[senderId] = currentTime;
 
     try {
-      sendMessage(senderId, { text: 'Generation de l image en cours...🤩' }, pageAccessToken);
-      // Appel à l'API pour générer l'image
-      const apiUrl = `https://joshweb.click/api/art?prompt=${encodeURIComponent(prompt)}`;
+      // Indiquer que l'image est en cours de génération
+      await sendMessage(senderId, { text: `🎨 Génération de votre image avec le prompt : "${prompt}"...` }, pageAccessToken);
+
+      // URL de l'API avec le prompt encodé
+      const apiUrl = `https://joshweb.click/api/flux?prompt=${encodeURIComponent(prompt)}&model=4`;
       const response = await axios.get(apiUrl);
-      const data = response.data;
 
-      // Extraire l'URL de l'image de la réponse
-      const imageUrlMatch = data.response.match(/\((https:\/\/[^\)]+)\)/);
-      const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
-
-      if (imageUrl) {
-        await sendMessage(senderId, {
-          attachment: { type: 'image', payload: { url: imageUrl } }
-        }, pageAccessToken);
-      } else {
-        await sendMessage(senderId, { text: `Failed to generate image. Please try a different prompt.` }, pageAccessToken);
+      // Vérifier si la réponse contient une image
+      const imageUrl = response.data.url; // Supposons que l'API renvoie { "url": "<lien de l'image>" }
+      if (!imageUrl) {
+        throw new Error("L'API n'a pas renvoyé d'URL d'image.");
       }
 
+      // Envoyer l'image générée à l'utilisateur
+      await sendMessage(senderId, {
+        attachment: {
+          type: 'image',
+          payload: { url: imageUrl }
+        }
+      }, pageAccessToken);
+
+      // Ajouter un message complémentaire si nécessaire
+      await sendMessage(senderId, { text: "🖼️ Voici votre image générée avec succès !" }, pageAccessToken);
+
     } catch (error) {
-      console.error('Error:', error);
-      await sendMessage(senderId, { text: 'Error: Unexpected error while generating image.' }, pageAccessToken);
+      console.error('Erreur lors de la génération de l’image :', error);
+      // Message d'erreur en cas d'échec
+      await sendMessage(senderId, { text: "❌ Une erreur est survenue lors de la génération de l'image. Veuillez réessayer plus tard." }, pageAccessToken);
     }
   }
 };
