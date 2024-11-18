@@ -3,13 +3,20 @@ const path = require('path');
 const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
-// Gestion des commandes et états
+// Gestion des commandes, états et abonnements
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec une date d'expiration
 const validCodes = ["2201", "1206", "0612", "1212", "2003"];
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
 const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
+
+// Charger les commandes
+const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = require(`../commands/${file}`);
+  commands.set(command.name, command);
+}
 
 // Charger les abonnements sauvegardés
 const subscriptionFile = path.join(__dirname, 'subscriptions.json');
@@ -29,46 +36,103 @@ function saveSubscriptions() {
   fs.writeFileSync(subscriptionFile, JSON.stringify(data, null, 2));
 }
 
-// Charger les commandes
-const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-  const command = require(`../commands/${file}`);
-  commands.set(command.name, command);
-}
-
-// Vérification de l'abonnement
+// Fonction pour vérifier si un utilisateur est abonné
 function checkSubscription(senderId) {
   const expirationDate = userSubscriptions.get(senderId);
   if (!expirationDate) return false; // Pas d'abonnement
-  if (Date.now() < expirationDate) return true; // Abonnement valide
-  // Supprimer si expiré
+  if (Date.now() < expirationDate) return true; // Abonnement encore valide
+  // Supprimer l'abonnement si expiré
   userSubscriptions.delete(senderId);
   saveSubscriptions();
   return false;
 }
 
-// Notifications avant expiration
-async function notifySubscriptionExpiry(senderId, pageAccessToken) {
-  const expirationDate = userSubscriptions.get(senderId);
-  if (expirationDate && Date.now() > expirationDate - 3 * 24 * 60 * 60 * 1000) { // 3 jours avant expiration
-    await sendMessage(senderId, {
-      text: `⏳ Votre abonnement expirera bientôt (le ${new Date(expirationDate).toLocaleDateString()}). Renouvelez-le en entrant un code valide.`
-    }, pageAccessToken);
+// Fonction principale pour gérer les messages entrants
+async function handleMessage(event, pageAccessToken) {
+  const senderId = event.sender.id;
+
+  // Vérifier si l'utilisateur est abonné
+  const isSubscribed = checkSubscription(senderId);
+
+  if (event.message.attachments && event.message.attachments[0].type === 'image') {
+    // Gérer les images
+    const imageUrl = event.message.attachments[0].payload.url;
+    await askForImagePrompt(senderId, imageUrl, pageAccessToken);
+  } else if (event.message.text) {
+    const messageText = event.message.text.trim();
+
+    // Validation d'un code d'abonnement
+    if (validCodes.includes(messageText)) {
+      const expirationDate = Date.now() + subscriptionDuration;
+      userSubscriptions.set(senderId, expirationDate);
+      saveSubscriptions();
+      await sendMessage(senderId, {
+        text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
+      }, pageAccessToken);
+
+      // Exécution automatique de la commande "menu" après validation
+      await showMenu(senderId, pageAccessToken);
+      return;
+    }
+
+    // Commande "menu" pour quitter un mode ou afficher les options
+    if (messageText.toLowerCase() === 'menu') {
+      userStates.delete(senderId);
+      await showMenu(senderId, pageAccessToken);
+      return;
+    }
+
+    // Vérifier si l'utilisateur est en mode d'analyse d'image
+    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const { imageUrl } = userStates.get(senderId);
+      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
+      return;
+    }
+
+    // Vérification si le message correspond au nom d'une commande pour déverrouiller et basculer
+    const args = messageText.split(' ');
+    const commandName = args[0].toLowerCase();
+    const command = commands.get(commandName);
+
+    if (command) {
+      // Si l'utilisateur était verrouillé sur une autre commande, on déverrouille
+      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+        const previousCommand = userStates.get(senderId).lockedCommand;
+        if (previousCommand !== commandName) {
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Toutes vos questions seront traitées par cette commande. Tapez 'menu' pour quitter.` }, pageAccessToken);
+      }
+      // Verrouiller sur la nouvelle commande
+      userStates.set(senderId, { lockedCommand: commandName });
+      return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+    }
+
+    // Si l'utilisateur est déjà verrouillé sur une commande
+    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+      const lockedCommand = userStates.get(senderId).lockedCommand;
+      const lockedCommandInstance = commands.get(lockedCommand);
+      if (lockedCommandInstance) {
+        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
+      }
+    } else {
+      // Sinon, traiter comme texte générique ou commande non reconnue
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'menu'." }, pageAccessToken);
+    }
   }
 }
 
 // Demander le prompt de l'utilisateur pour analyser l'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, {
-    text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo ! 📸😊."
-  }, pageAccessToken);
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ?" }, pageAccessToken);
 }
 
 // Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔 ⏳" }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant..." }, pageAccessToken);
 
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
@@ -95,7 +159,7 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
     return response.data && response.data.answer ? response.data.answer : '';
   } catch (error) {
     console.error('Erreur avec Gemini :', error);
-    throw new Error('Erreur lors de l\'analyse avec Gemini');
+    throw new Error('Erreur lors de l'analyse avec Gemini');
   }
 }
 
@@ -105,65 +169,11 @@ async function showMenu(senderId, pageAccessToken) {
   if (isSubscribed) {
     const expirationDate = new Date(userSubscriptions.get(senderId));
     await sendMessage(senderId, {
-      text: `📋 Menu principal :\n- Votre abonnement est actif jusqu'au ${expirationDate.toLocaleDateString()}.\n- Tapez un code pour le renouveler.\n- Tapez 'menu abonnement' pour gérer vos options.`
+      text: `📋 Menu principal :\n- Votre abonnement est actif jusqu'au ${expirationDate.toLocaleDateString()}.\n- Tapez un code pour le renouveler.\n- Tapez une commande pour continuer.`
     }, pageAccessToken);
   } else {
     await sendMessage(senderId, {
       text: `❌ Vous n'êtes pas abonné.\n- Entrez un code d'abonnement pour activer votre accès.\n- Coût : ${subscriptionCost} AR pour 30 jours.`
-    }, pageAccessToken);
-  }
-}
-
-// Gérer les messages entrants
-async function handleMessage(event, pageAccessToken) {
-  const senderId = event.sender.id;
-
-  if (event.message.attachments && event.message.attachments[0].type === 'image') {
-    // Gérer les images
-    const imageUrl = event.message.attachments[0].payload.url;
-    await askForImagePrompt(senderId, imageUrl, pageAccessToken);
-  } else if (event.message.text) {
-    const messageText = event.message.text.trim().toLowerCase();
-
-    // Gestion du menu
-    if (messageText === 'menu') {
-      return await showMenu(senderId, pageAccessToken);
-    }
-
-    if (messageText === 'menu abonnement') {
-      const isSubscribed = checkSubscription(senderId);
-      if (isSubscribed) {
-        const expirationDate = new Date(userSubscriptions.get(senderId));
-        await sendMessage(senderId, {
-          text: `📅 Votre abonnement est actif jusqu'au ${expirationDate.toLocaleDateString()}.\nRenouvelez-le avant expiration.`
-        }, pageAccessToken);
-      } else {
-        await sendMessage(senderId, {
-          text: `❌ Vous n'êtes pas abonné. Utilisez un code valide pour activer l'accès.`
-        }, pageAccessToken);
-      }
-      return;
-    }
-
-    // Validation d'un code d'abonnement
-    if (validCodes.includes(messageText)) {
-      const expirationDate = Date.now() + subscriptionDuration;
-      userSubscriptions.set(senderId, expirationDate);
-      saveSubscriptions();
-      await sendMessage(senderId, {
-        text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
-      }, pageAccessToken);
-      return;
-    }
-
-    // Notifications avant expiration
-    if (checkSubscription(senderId)) {
-      await notifySubscriptionExpiry(senderId, pageAccessToken);
-    }
-
-    // Par défaut, traiter le reste des commandes
-    await sendMessage(senderId, {
-      text: "❓ Commande non reconnue. Tapez 'menu' pour voir les options disponibles."
     }, pageAccessToken);
   }
 }
