@@ -49,4 +49,40 @@ function sendMessage(senderId, message, pageAccessToken) {
   });
 }
 
-module.exports = { sendMessage };
+// Nouvelle fonction pour envoyer une image via une URL
+async function sendGeneratedImage(senderId, imageUrl, pageAccessToken) {
+  if (!imageUrl) {
+    console.error('Error: Image URL is required to send an image.');
+    return;
+  }
+
+  const payload = {
+    recipient: { id: senderId },
+    message: {
+      attachment: {
+        type: "image",
+        payload: {
+          url: imageUrl,
+          is_reusable: true, // Permet de réutiliser l'image
+        }
+      }
+    }
+  };
+
+  request({
+    url: 'https://graph.facebook.com/v13.0/me/messages',
+    qs: { access_token: pageAccessToken },
+    method: 'POST',
+    json: payload,
+  }, (error, response, body) => {
+    if (error) {
+      console.error('Error sending image:', error);
+    } else if (response.body.error) {
+      console.error('Error response:', response.body.error);
+    } else {
+      console.log('Image sent successfully:', body);
+    }
+  });
+}
+
+module.exports = { sendMessage, sendGeneratedImage };
