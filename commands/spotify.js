@@ -38,7 +38,7 @@ module.exports = {
     try {
       sendMessage(senderId, { text: 'Generation de l image en cours...🤩' }, pageAccessToken);
       // Appel à l'API pour générer l'image
-      const apiUrl = `https://joshweb.click/api/flux?prompt=${encodeURIComponent(prompt)}`;
+      const apiUrl = `https://joshweb.click/api/art?prompt=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
       const data = response.data;
 
