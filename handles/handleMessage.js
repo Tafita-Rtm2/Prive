@@ -74,10 +74,10 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Toutes vos questions seront traitées par cette commande. Tapez 'stop' pour quitter.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
@@ -101,33 +101,27 @@ async function handleMessage(event, pageAccessToken) {
 // Demander le prompt de l'utilisateur pour analyser l'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo ! 📸😊." }, pageAccessToken);
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? Posez vos questions sur cette photo !" }, pageAccessToken);
 }
 
 // Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    console.log("Début de l'analyse d'image...");
-    console.log("Image URL :", imageUrl);
-    console.log("Prompt utilisateur :", prompt);
-
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔 ⏳" }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Veuillez patienter..." }, pageAccessToken);
 
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
     if (imageAnalysis) {
-      console.log("Réponse de l'API :", imageAnalysis);
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
+      await sendMessage(senderId, { text: `📄 Résultat de l'analyse :\n${imageAnalysis}` }, pageAccessToken);
     } else {
-      console.log("Aucune information exploitable détectée.");
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
 
     // Rester en mode d'analyse d'image tant que l'utilisateur ne tape pas "stop"
     userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
   } catch (error) {
-    console.error('Erreur lors de l\'analyse de l\'image :', error.message);
-    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image. Veuillez réessayer." }, pageAccessToken);
+    console.error('Erreur lors de l\'analyse de l\'image :', error);
+    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image. Veuillez réessayer plus tard." }, pageAccessToken);
   }
 }
 
@@ -136,20 +130,11 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
   const geminiApiEndpoint = 'https://joshweb.click/gemini';
 
   try {
-    console.log("Envoi des données à l'API Gemini...");
-    const response = await axios.get(`${geminiApiEndpoint}?prompt=${encodeURIComponent(prompt)}&url=${encodeURIComponent(imageUrl)}`);
-    console.log("Réponse brute de l'API Gemini :", response.data);
-
-    // Vérifier si l'API retourne une réponse valide
-    if (response.data && response.data.answer) {
-      return response.data.answer;
-    } else {
-      console.log("Aucune réponse valide obtenue de l'API.");
-      return null;
-    }
+    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    return response.data && response.data.answer ? response.data.answer : '';
   } catch (error) {
-    console.error('Erreur lors de l\'appel à l\'API Gemini :', error.message);
-    throw new Error('Erreur avec l\'API Gemini');
+    console.error('Erreur avec Gemini :', error.response?.data || error.message);
+    throw new Error('Erreur lors de l\'analyse avec Gemini');
   }
 }
 
