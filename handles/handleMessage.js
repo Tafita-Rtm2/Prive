@@ -130,7 +130,7 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
   const geminiApiEndpoint = 'https://joshweb.click/gemini';
 
   try {
-    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    const response = await axios.get(`${geminiApiEndpoint}?prompt=${encodeURIComponent(prompt)}&url=${encodeURIComponent(imageUrl)}`);
     return response.data && response.data.answer ? response.data.answer : '';
   } catch (error) {
     console.error('Erreur avec Gemini :', error);
