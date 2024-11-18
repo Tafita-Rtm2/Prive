@@ -5,11 +5,11 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs
-const userFreeMessages = new Map(); // Suivi des messages gratuits par utilisateur (par jour)
-const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes d'abonnement valides
-const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours (en ms)
-const freeMessageLimit = 5; // Limite de 5 messages gratuits par jour
+const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec une date d'expiration
+const userFreeQuestions = new Map(); // Enregistre le nombre de questions gratuites par utilisateur par jour
+const validCodes = ["2201", "1206", "0612", "1212", "2003"];
+const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
+const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -22,15 +22,9 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Vérifier l'abonnement de l'utilisateur ou sa limite de messages gratuits
-  if (!isUserAllowed(senderId)) {
-    await sendMessage(senderId, {
-      text: "🚫 Vous avez atteint votre limite de messages gratuits pour aujourd'hui ou vous n'êtes pas abonné. Veuillez entrer un code d'abonnement valide pour continuer."
-    }, pageAccessToken);
-    return;
-  }
+  // Vérifier si l'utilisateur est abonné
+  const isSubscribed = checkSubscription(senderId);
 
-  // Gestion des messages envoyés par l'utilisateur
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
@@ -41,13 +35,7 @@ async function handleMessage(event, pageAccessToken) {
     // Validation d'un code d'abonnement
     if (validCodes.includes(messageText)) {
       const expirationDate = Date.now() + subscriptionDuration;
-
-      // Enregistrer l'abonnement
-      userSubscriptions.set(senderId, {
-        expirationDate,
-        paymentVerified: true
-      });
-
+      userSubscriptions.set(senderId, expirationDate);
       await sendMessage(senderId, {
         text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
       }, pageAccessToken);
@@ -69,9 +57,6 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Gestion des messages gratuits pour les utilisateurs non abonnés
-    updateFreeMessages(senderId);
-
     // Vérifier si l'utilisateur est en mode d'analyse d'image
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
       const { imageUrl } = userStates.get(senderId);
@@ -79,7 +64,7 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Vérification si le message correspond au nom d'une commande
+    // Vérification si le message correspond au nom d'une commande pour déverrouiller et basculer
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
     const command = commands.get(commandName);
@@ -113,60 +98,54 @@ async function handleMessage(event, pageAccessToken) {
   }
 }
 
-// Fonction pour vérifier si un utilisateur est autorisé (abonné ou dans la limite gratuite)
-function isUserAllowed(senderId) {
-  const isSubscribed = checkSubscription(senderId);
+// Demander le prompt de l'utilisateur pour analyser l'image
+async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
+  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo !  📸😊." }, pageAccessToken);
+}
 
-  if (isSubscribed) {
-    return true; // Utilisateur abonné, aucune limite
+// Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
+async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
+  try {
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image.  Patientez un instant... 🤔  ⏳" }, pageAccessToken);
+
+    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
+
+    if (imageAnalysis) {
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image  :\n${imageAnalysis}` }, pageAccessToken);
+    } else {
+      await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
+    }
+
+    // Rester en mode d'analyse d'image tant que l'utilisateur ne tape pas "stop"
+    userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse de l\'image :', error);
+    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
   }
+}
 
-  // Vérifier les messages gratuits restants
-  const freeMessagesLeft = checkFreeMessages(senderId);
-  return freeMessagesLeft > 0;
+// Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
+async function analyzeImageWithGemini(imageUrl, prompt) {
+  const geminiApiEndpoint = 'https://joshweb.click/gemini';
+
+  try {
+    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    return response.data && response.data.answer ? response.data.answer : '';
+  } catch (error) {
+    console.error('Erreur avec Gemini :', error);
+    throw new Error('Erreur lors de l\'analyse avec Gemini');
+  }
 }
 
 // Fonction pour vérifier l'abonnement de l'utilisateur
 function checkSubscription(senderId) {
-  const subscription = userSubscriptions.get(senderId);
-  if (!subscription) return false; // Pas d'abonnement
-
-  const { expirationDate, paymentVerified } = subscription;
-  if (!paymentVerified) return false; // Paiement non vérifié
+  const expirationDate = userSubscriptions.get(senderId);
+  if (!expirationDate) return false; // Pas d'abonnement
   if (Date.now() < expirationDate) return true; // Abonnement encore valide
-
   // Supprimer l'abonnement si expiré
   userSubscriptions.delete(senderId);
   return false;
-}
-
-// Fonction pour vérifier les messages gratuits disponibles
-function checkFreeMessages(senderId) {
-  const today = new Date().toLocaleDateString(); // Clé basée sur la date
-  if (!userFreeMessages.has(senderId)) {
-    userFreeMessages.set(senderId, { [today]: freeMessageLimit });
-    return freeMessageLimit;
-  }
-
-  const userStats = userFreeMessages.get(senderId);
-  if (!userStats[today]) {
-    userStats[today] = freeMessageLimit;
-    return freeMessageLimit;
-  }
-
-  return userStats[today];
-}
-
-// Fonction pour réduire les messages gratuits restants
-function updateFreeMessages(senderId) {
-  const today = new Date().toLocaleDateString();
-  if (!userFreeMessages.has(senderId)) {
-    userFreeMessages.set(senderId, { [today]: freeMessageLimit - 1 });
-  } else {
-    const userStats = userFreeMessages.get(senderId);
-    userStats[today] = (userStats[today] || freeMessageLimit) - 1;
-    userFreeMessages.set(senderId, userStats);
-  }
 }
 
 module.exports = { handleMessage };
