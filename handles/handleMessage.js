@@ -5,10 +5,9 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec une date d'expiration
-const userFreeQuestions = new Map(); // Enregistre le nombre de questions gratuites par utilisateur par jour
-const validCodes = ["2201", "1206", "0612", "1212", "2003"];
-const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
+const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec expiration et statut de paiement
+const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes valides
+const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement par défaut : 30 jours
 const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
 
 // Charger les commandes
@@ -35,7 +34,13 @@ async function handleMessage(event, pageAccessToken) {
     // Validation d'un code d'abonnement
     if (validCodes.includes(messageText)) {
       const expirationDate = Date.now() + subscriptionDuration;
-      userSubscriptions.set(senderId, expirationDate);
+
+      // Enregistrer l'abonnement dans le système
+      userSubscriptions.set(senderId, { 
+        expirationDate, 
+        paymentVerified: true // On considère ici que le paiement est vérifié
+      });
+
       await sendMessage(senderId, {
         text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
       }, pageAccessToken);
@@ -64,7 +69,7 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Vérification si le message correspond au nom d'une commande pour déverrouiller et basculer
+    // Vérification si le message correspond au nom d'une commande
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
     const command = commands.get(commandName);
@@ -101,18 +106,18 @@ async function handleMessage(event, pageAccessToken) {
 // Demander le prompt de l'utilisateur pour analyser l'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo !  📸😊." }, pageAccessToken);
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo ! 📸😊." }, pageAccessToken);
 }
 
 // Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image.  Patientez un instant... 🤔  ⏳" }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔⏳" }, pageAccessToken);
 
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
     if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image  :\n${imageAnalysis}` }, pageAccessToken);
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
     } else {
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
@@ -140,9 +145,13 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
 
 // Fonction pour vérifier l'abonnement de l'utilisateur
 function checkSubscription(senderId) {
-  const expirationDate = userSubscriptions.get(senderId);
-  if (!expirationDate) return false; // Pas d'abonnement
+  const subscription = userSubscriptions.get(senderId);
+  if (!subscription) return false; // Pas d'abonnement
+
+  const { expirationDate, paymentVerified } = subscription;
+  if (!paymentVerified) return false; // Paiement non vérifié
   if (Date.now() < expirationDate) return true; // Abonnement encore valide
+
   // Supprimer l'abonnement si expiré
   userSubscriptions.delete(senderId);
   return false;
