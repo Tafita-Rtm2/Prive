@@ -1,52 +1,59 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
-
-const token = fs.readFileSync('token.txt', 'utf8');
+const path = require('path');
 
 module.exports = {
-  name: 'image',
-  description: 'Génère une image en fonction d’un prompt donné',
-  author: 'Tata',
-
-  async execute(senderId, args) {
-    const pageAccessToken = token;
+  name: 'image-generator',
+  description: 'Génère une image à partir d\'un prompt et envoie le résultat.',
+  author: 'Deku (API Image Generator)',
+  async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    // Vérification du prompt fourni par l'utilisateur
-    if (!prompt.trim()) {
-      await sendMessage(senderId, { text: "❌ Veuillez fournir une description pour générer une image." }, pageAccessToken);
-      return;
+    if (!prompt) {
+      return sendMessage(senderId, { text: "Veuillez entrer un prompt valide pour générer une image." }, pageAccessToken);
     }
 
     try {
-      // Informer l'utilisateur que l'image est en cours de génération
-      await sendMessage(senderId, {
-        text: `🎨 Génération d'image pour le prompt : "${prompt}". Veuillez patienter... ⏳`
-      }, pageAccessToken);
+      // Envoyer un message indiquant que l'image est en cours de génération
+      await sendMessage(senderId, { text: '🖌️ Génération de votre image en cours⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Appeler l'API pour générer l'image
+      // Appel à l'API pour générer l'image
       const apiUrl = `https://joshweb.click/api/flux?prompt=${encodeURIComponent(prompt)}&model=4`;
-      const apiResponse = await axios.get(apiUrl);
+      const response = await axios.get(apiUrl, { responseType: 'stream' }); // Récupérer l'image en tant que flux
 
-      // Récupération de l'URL de l'image générée
-      const imageUrl = apiResponse.data.image;
+      // Chemin temporaire pour enregistrer l'image
+      const tempImagePath = path.join(__dirname, `temp-${Date.now()}.jpg`);
 
-      if (!imageUrl) {
-        throw new Error("Aucune image générée par l'API.");
-      }
+      // Enregistrer l'image localement
+      const writer = fs.createWriteStream(tempImagePath);
+      response.data.pipe(writer);
 
-      // Envoi de l'image à l'utilisateur
-      await sendMessage(senderId, {
+      // Attendre la fin de l'écriture de l'image
+      await new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+      });
+
+      // Envoyer l'image à l'utilisateur
+      const imagePayload = {
         attachment: {
-          type: "image",
-          payload: { url: imageUrl }
-        }
-      }, pageAccessToken);
+          type: 'image',
+          payload: {
+            is_reusable: true,
+            url: `file://${tempImagePath}`,
+          },
+        },
+      };
+
+      await sendMessage(senderId, imagePayload, pageAccessToken);
+
+      // Supprimer le fichier temporaire après l'envoi
+      fs.unlinkSync(tempImagePath);
 
     } catch (error) {
-      console.error("Erreur lors de la génération de l'image :", error.message);
-      await sendMessage(senderId, { text: "❌ Une erreur est survenue lors de la génération de l'image. Veuillez réessayer plus tard. 🙁" }, pageAccessToken);
+      console.error('Erreur lors de la génération de l\'image:', error);
+      // Envoyer un message d'erreur
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue lors de la génération de l\'image. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
-  }
+  },
 };
