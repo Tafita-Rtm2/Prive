@@ -6,11 +6,10 @@ const { sendMessage } = require('./sendMessage');
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs
-const userFreeQuestions = new Map(); // Suivi des questions gratuites par utilisateur (par jour)
+const userFreeMessages = new Map(); // Suivi des messages gratuits par utilisateur (par jour)
 const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes d'abonnement valides
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours (en ms)
-const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
-const freeQuestionLimit = 2; // Limite de 2 questions gratuites par jour
+const freeMessageLimit = 5; // Limite de 5 messages gratuits par jour
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -23,10 +22,10 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Vérifier l'abonnement de l'utilisateur ou sa limite de questions gratuites
+  // Vérifier l'abonnement de l'utilisateur ou sa limite de messages gratuits
   if (!isUserAllowed(senderId)) {
     await sendMessage(senderId, {
-      text: "🚫 Vous avez atteint votre limite de questions gratuites pour aujourd'hui ou vous n'êtes pas abonné. Veuillez entrer un code d'abonnement valide pour continuer."
+      text: "🚫 Vous avez atteint votre limite de messages gratuits pour aujourd'hui ou vous n'êtes pas abonné. Veuillez entrer un code d'abonnement valide pour continuer."
     }, pageAccessToken);
     return;
   }
@@ -70,8 +69,8 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Gestion des questions gratuites pour les utilisateurs non abonnés
-    updateFreeQuestions(senderId);
+    // Gestion des messages gratuits pour les utilisateurs non abonnés
+    updateFreeMessages(senderId);
 
     // Vérifier si l'utilisateur est en mode d'analyse d'image
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
@@ -122,9 +121,9 @@ function isUserAllowed(senderId) {
     return true; // Utilisateur abonné, aucune limite
   }
 
-  // Vérifier les questions gratuites restantes
-  const freeQuestionsLeft = checkFreeQuestions(senderId);
-  return freeQuestionsLeft > 0;
+  // Vérifier les messages gratuits restants
+  const freeMessagesLeft = checkFreeMessages(senderId);
+  return freeMessagesLeft > 0;
 }
 
 // Fonction pour vérifier l'abonnement de l'utilisateur
@@ -141,32 +140,32 @@ function checkSubscription(senderId) {
   return false;
 }
 
-// Fonction pour vérifier les questions gratuites disponibles
-function checkFreeQuestions(senderId) {
+// Fonction pour vérifier les messages gratuits disponibles
+function checkFreeMessages(senderId) {
   const today = new Date().toLocaleDateString(); // Clé basée sur la date
-  if (!userFreeQuestions.has(senderId)) {
-    userFreeQuestions.set(senderId, { [today]: freeQuestionLimit });
-    return freeQuestionLimit;
+  if (!userFreeMessages.has(senderId)) {
+    userFreeMessages.set(senderId, { [today]: freeMessageLimit });
+    return freeMessageLimit;
   }
 
-  const userStats = userFreeQuestions.get(senderId);
+  const userStats = userFreeMessages.get(senderId);
   if (!userStats[today]) {
-    userStats[today] = freeQuestionLimit;
-    return freeQuestionLimit;
+    userStats[today] = freeMessageLimit;
+    return freeMessageLimit;
   }
 
   return userStats[today];
 }
 
-// Fonction pour réduire les questions gratuites restantes
-function updateFreeQuestions(senderId) {
+// Fonction pour réduire les messages gratuits restants
+function updateFreeMessages(senderId) {
   const today = new Date().toLocaleDateString();
-  if (!userFreeQuestions.has(senderId)) {
-    userFreeQuestions.set(senderId, { [today]: freeQuestionLimit - 1 });
+  if (!userFreeMessages.has(senderId)) {
+    userFreeMessages.set(senderId, { [today]: freeMessageLimit - 1 });
   } else {
-    const userStats = userFreeQuestions.get(senderId);
-    userStats[today] = (userStats[today] || freeQuestionLimit) - 1;
-    userFreeQuestions.set(senderId, userStats);
+    const userStats = userFreeMessages.get(senderId);
+    userStats[today] = (userStats[today] || freeMessageLimit) - 1;
+    userFreeMessages.set(senderId, userStats);
   }
 }
 
