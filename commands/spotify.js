@@ -1,100 +1,86 @@
 const axios = require('axios');
-
 const { sendMessage } = require('../handles/sendMessage');
-
 const fs = require('fs');
+const https = require('https');
+const path = require('path');
 
 // Lecture du token d'accès pour l'envoi des messages
+const token = fs.readFileSync('token.txt', 'utf8').trim();
 
-const token = fs.readFileSync('token.txt', 'utf8');
-
-// Dictionnaire pour suivre le dernier horodatage de chaque utilisateur
-
-const lastUsage = {};
+if (!token) {
+  throw new Error('Le token d’accès est manquant ou invalide.');
+}
 
 module.exports = {
+  name: 'imagine',
+  description: 'Generate an AI-based image using a prompt and send it via Messenger',
+  author: 'Tata',
+  usage: 'imagine girl',
 
-name: 'imagine',
+  async execute(senderId, args) {
+    const pageAccessToken = token;
+    const prompt = args.join(' ').trim();
 
-description: 'Generate an AI-based image with a 2-minute cooldown',
+    // Vérifie que l'utilisateur a bien entré une commande
+    if (!prompt) {
+      return await sendMessage(senderId, { text: '❌ Veuillez fournir une description pour générer une image.' }, pageAccessToken);
+    }
 
-author: 'Tata',
+    try {
+      // Message d'attente
+      await sendMessage(senderId, { text: '🎨 Génération de l’image en cours... 🤩' }, pageAccessToken);
 
-usage:'imagine dog',
+      // Appel à l'API pour générer l'image
+      const apiUrl = `https://api.kenliejugarap.com/flux-realism/?prompt=${encodeURIComponent(prompt)}`;
+      const response = await axios.get(apiUrl);
 
-async execute(senderId, args) {
+      // Récupération de l'URL de l'image générée
+      const imageUrl = response.data?.url;
 
-const pageAccessToken = token;
+      if (!imageUrl) {
+        return await sendMessage(senderId, { text: '❌ Échec de la génération de l’image. Essayez un autre prompt.' }, pageAccessToken);
+      }
 
-const prompt = args.join(' ').trim();
+      // Téléchargement de l'image générée
+      const imagePath = path.join(__dirname, 'generated_image.jpg');
+      await downloadImage(imageUrl, imagePath);
 
-// Vérifie que l'utilisateur a bien entré une commande
+      // Envoi de l'image générée via Messenger
+      const formData = {
+        recipient: JSON.stringify({ id: senderId }),
+        message: JSON.stringify({
+          attachment: {
+            type: 'image',
+            payload: {}
+          }
+        }),
+        filedata: fs.createReadStream(imagePath)
+      };
 
-if (!prompt) {
+      await axios.post(`https://graph.facebook.com/v12.0/me/messages?access_token=${pageAccessToken}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
 
-return await sendMessage(senderId, { text: 'Please provide a prompt for the image generator.' }, pageAccessToken);
+      console.log('Image envoyée avec succès.');
 
-}
-
-// Vérifier l'intervalle de 2 minutes pour cet utilisateur
-
-const currentTime = Date.now();
-
-const cooldownPeriod = 2 * 60 * 1000; // 2 minutes en millisecondes
-
-if (lastUsage[senderId] && currentTime - lastUsage[senderId] < cooldownPeriod) {
-
-const remainingTime = Math.ceil((cooldownPeriod - (currentTime - lastUsage[senderId])) / 1000);
-
-return await sendMessage(senderId, { text: `Please wait ${remainingTime} seconds before using this command again.` }, pageAccessToken);
-
-}
-
-// Mettre à jour le dernier horodatage d'utilisation de la commande
-
-lastUsage[senderId] = currentTime;
-
-try {
-
-sendMessage(senderId, { text: 'Generation de l image en cours...🤩' }, pageAccessToken);
-
-// Appel à l'API pour générer l'image
-
-const apiUrl = `https://api.kenliejugarap.com/flux-realism/?prompt=${encodeURIComponent(prompt)}`;
-
-const response = await axios.get(apiUrl);
-
-const data = response.data;
-
-// Extraire l'URL de l'image de la réponse
-
-const imageUrlMatch = data.response.match(/\((https:\/\/[^\)]+)\)/);
-
-const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
-
-if (imageUrl) {
-
-await sendMessage(senderId, {
-
-attachment: { type: 'image', payload: { url: imageUrl } }
-
-}, pageAccessToken);
-
-} else {
-
-await sendMessage(senderId, { text: `Failed to generate image. Please try a different prompt.` }, pageAccessToken);
-
-}
-
-} catch (error) {
-
-console.error('Error:', error);
-
-await sendMessage(senderId, { text: 'Error: Unexpected error while generating image.' }, pageAccessToken);
-
-}
-
-}
-
+    } catch (error) {
+      console.error('Erreur lors de la génération ou de l’envoi de l’image :', error.message);
+      await sendMessage(senderId, { text: '❌ Une erreur inattendue est survenue. Réessayez plus tard.' }, pageAccessToken);
+    }
+  }
 };
 
+// Fonction pour télécharger l'image
+async function downloadImage(url, filepath) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(filepath);
+    https.get(url, (response) => {
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close(resolve);
+      });
+    }).on('error', (err) => {
+      fs.unlink(filepath, () => reject(err));
+    });
+  });
+}
