@@ -1,113 +1,116 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
-  name: 'gpt4',
-  description: 'Pose une question à chatgpt4.',
-  author: 'ArYAN',
-  
-  async execute(senderId, args, pageAccessToken, sendMessage) {
-    const query = args.join(' ');
+  name: 'gemini',
+  description: 'Chat avec Gemini ou génère une image',
+  author: 'vex_kshitiz',
 
-    if (!query) {
-      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
+  async execute(senderId, args, pageAccessToken, sendMessage, event = null) {
+    const prompt = args.join(' ').trim();
+
+    // Vérifie si une image est envoyée directement dans le message
+    if (event?.attachments?.length > 0) {
+      try {
+        // Si une image est envoyée, la décrire automatiquement
+        const photoUrl = event.attachments[0].url;
+        const description = await describeImage(prompt || "Décris cette image", photoUrl);
+        const formattedResponse = `👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nDescription: ${description}\n━━━━━━━━━━━━━━━━`;
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      } catch (error) {
+        console.error('Erreur lors de la description de l’image:', error);
+        await sendMessage(senderId, { text: 'Désolé, une erreur est survenue lors de la description de l’image.' }, pageAccessToken);
+      }
+      return;
+    }
+
+    if (!prompt) {
+      return sendMessage(senderId, { text: "👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nVeuillez fournir un prompt ou envoyer une image.\n━━━━━━━━━━━━━━━━" }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que l'IA réfléchit
-      const thinkingMessage = await sendMessage(senderId, { text: '🪐rtm gpt4 réfléchit⏳... 🤔' }, pageAccessToken);
+      if (args[0]?.toLowerCase() === "draw") {
+        // Générer une image
+        await sendMessage(senderId, { text: '💬 *Gemini est en train de générer une image* ⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Appel de la fonction pour obtenir la réponse la plus rapide parmi les services
-      const fastestAnswer = await getFastestValidAnswer(query, senderId);
+        const imageUrl = await generateImage(prompt);
 
-      // Envoyer la réponse formatée
-      const formattedResponse = `🇲🇬 | rtm ai gpt4 ⏳\n━━━━━━━━━━━━━━━━\n${fastestAnswer}\n━━━━━━━━━━━━━━━━`;
-      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+        // Téléchargement de l'image générée
+        const imagePath = path.join(__dirname, 'cache', `image_${Date.now()}.png`);
+        const writer = fs.createWriteStream(imagePath);
+        const { data } = await axios({ url: imageUrl, method: 'GET', responseType: 'stream' });
+        data.pipe(writer);
 
-      // Supprimer le message d'attente
-      await thinkingMessage.delete();
+        await new Promise((resolve, reject) => {
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+        });
 
+        // Envoyer l'image générée
+        await sendMessage(senderId, {
+          text: '👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nImage générée :',
+          attachment: fs.createReadStream(imagePath)
+        }, pageAccessToken);
+      } else {
+        // Obtenir une réponse textuelle
+        await sendMessage(senderId, { text: '💬 *Gemini est en train de te répondre* ⏳...\n\n─────★─────' }, pageAccessToken);
+        const response = await getTextResponse(prompt, senderId);
+        const formattedResponse = `─────★─────\n✨ Gemini 🤖\n\n${response}\n─────★─────`;
+
+        // Gérer les réponses longues
+        const maxMessageLength = 2000;
+        if (formattedResponse.length > maxMessageLength) {
+          const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+          for (const message of messages) {
+            await sendMessage(senderId, { text: message }, pageAccessToken);
+          }
+        } else {
+          await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+        }
+      }
     } catch (error) {
-      console.error('Erreur lors de la requête à l\'IA :', error);
-      await sendMessage(senderId, { text: '' }, pageAccessToken);
-    }
-  },
-
-  async handleImage(senderId, imageUrl, prompt, sendMessage, pageAccessToken) {
-    try {
-      // Envoyer un message indiquant que l'IA réfléchit sur l'image
-      const thinkingMessage = await sendMessage(senderId, { text: '🖼️ Analyzing the image... Please wait ⏳' }, pageAccessToken);
-
-      // Appel de la fonction pour obtenir la description de l'image
-      const description = await getFastestValidAnswerForImage(imageUrl, senderId);
-
-      // Envoyer la description formatée
-      const formattedResponse = `🖼️ | Image Analysis:\n━━━━━━━━━━━━━━━━\n${description}\n━━━━━━━━━━━━━━━━`;
-      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-
-      // Supprimer le message d'attente
-      await thinkingMessage.delete();
-      
-    } catch (error) {
-      console.error('Erreur lors de l\'analyse de l\'image avec l\'IA :', error);
-      await sendMessage(senderId, { text: 'Erreur lors de l\'analyse de l\'image.' }, pageAccessToken);
+      console.error('Erreur lors de l’appel API Gemini:', error);
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour appeler un service AI
-async function callService(service, prompt, senderID) {
-  if (service.isCustom) {
-    try {
-      const response = await axios.get(`${service.url}?${service.param.prompt}=${encodeURIComponent(prompt)}`);
-      return response.data.answer || response.data;
-    } catch (error) {
-      console.error(`Erreur du service personnalisé ${service.url}: ${error.message}`);
-      throw new Error(`Erreur du service ${service.url}: ${error.message}`);
-    }
-  } else {
-    const params = {};
-    for (const [key, value] of Object.entries(service.param)) {
-      params[key] = key === 'uid' ? senderID : encodeURIComponent(prompt);
-    }
-    const queryString = new URLSearchParams(params).toString();
-    try {
-      const response = await axios.get(`${service.url}?${queryString}`);
-      return response.data.answer || response.data;
-    } catch (error) {
-      console.error(`Erreur du service ${service.url}: ${error.message}`);
-      throw new Error(`Erreur du service ${service.url}: ${error.message}`);
-    }
+// Fonction pour obtenir une description d'image via l'API
+async function describeImage(prompt, photoUrl) {
+  try {
+    const { data } = await axios.get(`https://sandipbaruwal.onrender.com/gemini2?prompt=${encodeURIComponent(prompt)}&url=${encodeURIComponent(photoUrl)}`);
+    return data.answer;
+  } catch (error) {
+    throw new Error('Erreur lors de la description de l’image');
   }
 }
 
-// Fonction pour obtenir la réponse la plus rapide parmi les services pour un texte
-async function getFastestValidAnswer(prompt, senderID) {
-  const services = [
-    { url: 'https://gpt-four.vercel.app/gpt', param: { prompt: 'prompt' }, isCustom: true }
-  ];
-
-  const promises = services.map(service => callService(service, prompt, senderID));
-  const results = await Promise.allSettled(promises);
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value) {
-      return result.value;
-    }
+// Fonction pour obtenir une réponse textuelle via l'API
+async function getTextResponse(prompt, senderId) {
+  try {
+    const { data } = await axios.get(`https://sandipbaruwal.onrender.com/gemini2?prompt=${encodeURIComponent(prompt)}&uid=${senderId}&apikey=kshitiz`);
+    return data.answer;
+  } catch (error) {
+    throw new Error('Erreur lors de l’appel API Gemini pour la réponse textuelle');
   }
-  throw new Error('Tous les services ont échoué à fournir une réponse valide');
 }
 
-// Fonction pour obtenir la réponse la plus rapide parmi les services pour une image
-async function getFastestValidAnswerForImage(imageUrl, senderID) {
-  const services = [
-    { url: 'https://gpt-four.vercel.app/gpt', param: { prompt: 'imageUrl' }, isCustom: true }
-  ];
-
-  const promises = services.map(service => callService(service, imageUrl, senderID));
-  const results = await Promise.allSettled(promises);
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value) {
-      return result.value;
-    }
+// Fonction pour découper les messages trop longs
+function splitMessageIntoChunks(message, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += chunkSize) {
+    chunks.push(message.slice(i, i + chunkSize));
   }
-  throw new Error('Tous les services ont échoué à analyser l\'image');
-    }
+  return chunks;
+}
+
+// Fonction pour générer une image
+async function generateImage(prompt) {
+  try {
+    const { data } = await axios.get(`https://sdxl-kshitiz.onrender.com/gen?prompt=${encodeURIComponent(prompt)}&style=3`);
+    return data.url;
+  } catch (error) {
+    throw new Error('Erreur lors de la génération de l’image');
+  }
+  }
