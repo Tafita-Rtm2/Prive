@@ -1,5 +1,4 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
@@ -8,12 +7,13 @@ const path = require('path');
 const token = fs.readFileSync('token.txt', 'utf8').trim();
 
 if (!token) {
-  throw new Error('Le token d’accès est manquant ou invalide.');
+  throw new Error('Le token d’accès est manquant ou invalide. Vérifiez le fichier token.txt.');
 }
 
+// Fonction principale exportée
 module.exports = {
   name: 'imagine',
-  description: 'Generate an AI-based image using a prompt and send it via Messenger',
+  description: 'Génère une image basée sur un prompt et l’envoie via Messenger',
   author: 'Tata',
   usage: 'imagine girl',
 
@@ -21,13 +21,13 @@ module.exports = {
     const pageAccessToken = token;
     const prompt = args.join(' ').trim();
 
-    // Vérifie que l'utilisateur a bien entré une commande
+    // Vérifie si l'utilisateur a fourni un prompt
     if (!prompt) {
       return await sendMessage(senderId, { text: '❌ Veuillez fournir une description pour générer une image.' }, pageAccessToken);
     }
 
     try {
-      // Message d'attente
+      // Message de confirmation
       await sendMessage(senderId, { text: '🎨 Génération de l’image en cours... 🤩' }, pageAccessToken);
 
       // Appel à l'API pour générer l'image
@@ -46,19 +46,18 @@ module.exports = {
       await downloadImage(imageUrl, imagePath);
 
       // Envoi de l'image générée via Messenger
-      const formData = {
-        recipient: JSON.stringify({ id: senderId }),
-        message: JSON.stringify({
-          attachment: {
-            type: 'image',
-            payload: {}
-          }
-        }),
-        filedata: fs.createReadStream(imagePath)
-      };
+      const formData = new FormData();
+      formData.append('recipient', JSON.stringify({ id: senderId }));
+      formData.append('message', JSON.stringify({
+        attachment: {
+          type: 'image',
+          payload: {}
+        }
+      }));
+      formData.append('filedata', fs.createReadStream(imagePath));
 
       await axios.post(`https://graph.facebook.com/v12.0/me/messages?access_token=${pageAccessToken}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: formData.getHeaders()
       });
 
       console.log('Image envoyée avec succès.');
@@ -70,7 +69,19 @@ module.exports = {
   }
 };
 
-// Fonction pour télécharger l'image
+// Fonction pour envoyer un message texte via Messenger
+async function sendMessage(senderId, messageData, pageAccessToken) {
+  try {
+    await axios.post(`https://graph.facebook.com/v12.0/me/messages?access_token=${pageAccessToken}`, {
+      recipient: { id: senderId },
+      message: messageData
+    });
+  } catch (error) {
+    console.error('Erreur lors de l’envoi du message :', error.message);
+  }
+}
+
+// Fonction pour télécharger une image à partir d'une URL
 async function downloadImage(url, filepath) {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(filepath);
