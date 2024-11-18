@@ -40,20 +40,20 @@ async function handleMessage(event, pageAccessToken) {
         text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
       }, pageAccessToken);
 
-      // Exécution automatique de la commande "menu" après validation
-      const menuCommand = commands.get('menu');
-      if (menuCommand) {
-        await menuCommand.execute(senderId, [], pageAccessToken, sendMessage);
+      // Exécution automatique de la commande "help" après validation
+      const helpCommand = commands.get('help');
+      if (helpCommand) {
+        await helpCommand.execute(senderId, [], pageAccessToken, sendMessage);
       } else {
-        await sendMessage(senderId, { text: "❌ La commande 'menu' n'est pas disponible." }, pageAccessToken);
+        await sendMessage(senderId, { text: "❌ La commande 'help' n'est pas disponible." }, pageAccessToken);
       }
       return;
     }
 
-    // Commande "menu" pour quitter le mode actuel ou afficher le menu
-    if (messageText.toLowerCase() === 'menu') {
+    // Commande "stop" pour quitter le mode actuel
+    if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez une commande pour continuer." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
       return;
     }
 
@@ -74,10 +74,10 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Toutes vos questions seront traitées par cette commande. Tapez 'menu' pour quitter.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
@@ -93,8 +93,48 @@ async function handleMessage(event, pageAccessToken) {
       }
     } else {
       // Sinon, traiter comme texte générique ou commande non reconnue
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'menu'." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
     }
+  }
+}
+
+// Demander le prompt de l'utilisateur pour analyser l'image
+async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
+  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo !  📸😊." }, pageAccessToken);
+}
+
+// Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
+async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
+  try {
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image.  Patientez un instant... 🤔  ⏳" }, pageAccessToken);
+
+    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
+
+    if (imageAnalysis) {
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image  :\n${imageAnalysis}` }, pageAccessToken);
+    } else {
+      await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
+    }
+
+    // Rester en mode d'analyse d'image tant que l'utilisateur ne tape pas "stop"
+    userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse de l\'image :', error);
+    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
+  }
+}
+
+// Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
+async function analyzeImageWithGemini(imageUrl, prompt) {
+  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
+
+  try {
+    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    return response.data && response.data.answer ? response.data.answer : '';
+  } catch (error) {
+    console.error('Erreur avec Gemini :', error);
+    throw new Error('Erreur lors de l\'analyse avec Gemini');
   }
 }
 
