@@ -1,54 +1,52 @@
 const axios = require('axios');
 const fs = require('fs');
-const { sendMessage } = require('../handles/sendMessage');
+const { sendMessage } = require('../handles/sendMessage'); // Fonction d'envoi de message
 
+// Charger le token pour envoyer des messages
 const tokenPath = './token.txt';
 const pageAccessToken = fs.readFileSync(tokenPath, 'utf8').trim();
 
 module.exports = {
-  name: 'pinterest',
-  description: 'Search Pinterest for images.',
-  usage: '-pinterest prompt -number',
+  name: 'imagegen',
+  description: 'Generate an image with a prompt and send it to the user.',
+  usage: '-imagegen [prompt]',
   author: 'coffee',
 
   async execute(senderId, args) {
-    // Ensure args is defined and is an array, default to an empty string if not
-    if (!args || !Array.isArray(args) || args.length === 0) {
-      await sendMessage(senderId, { text: 'Please provide a search query.' }, pageAccessToken);
+    // Vérifier si le prompt est fourni
+    if (!args || args.length === 0) {
+      await sendMessage(senderId, { text: 'Veuillez fournir un prompt pour générer une image.' }, pageAccessToken);
       return;
     }
 
-    // Handle the case where user provides a search query and optional number of images
-    const match = args.join(' ').match(/(.+)-(\d+)$/);
-    const searchQuery = match ? match[1].trim() : args.join(' ');
-    let imageCount = match ? parseInt(match[2], 10) : 5;
+    // Construire le prompt à partir des arguments fournis par l'utilisateur
+    const prompt = args.join(' ');
 
-    // Ensure the user-requested count is within 1 to 20
-    imageCount = Math.max(1, Math.min(imageCount, 20));
+    // Construire l'URL de l'API avec le prompt
+    const apiUrl = `https://api.kenliejugarap.com/flux-realism-v2/?prompt=${encodeURIComponent(prompt)}`;
 
     try {
-      const { data } = await axios.get(`https://hiroshi-api.onrender.com/image/pinterest?search=${encodeURIComponent(searchQuery)}`);
+      // Appel à l'API pour générer l'image
+      const { data } = await axios.get(apiUrl);
 
-      // Limit the number of images to the user-requested count
-      const selectedImages = data.data.slice(0, imageCount);
-
-      if (selectedImages.length === 0) {
-        await sendMessage(senderId, { text: `No images found for "${searchQuery}".` }, pageAccessToken);
-        return;
-      }
-
-      // Send each image in a separate message
-      for (const url of selectedImages) {
+      // Vérifier si l'API a renvoyé une URL valide pour l'image
+      if (data && data.imageUrl) {
+        // Construire le message avec l'image
         const attachment = {
           type: 'image',
-          payload: { url }
+          payload: { url: data.imageUrl }, // URL de l'image générée
         };
-        await sendMessage(senderId, { attachment }, pageAccessToken);
-      }
 
+        // Envoyer l'image directement à l'utilisateur
+        await sendMessage(senderId, { attachment }, pageAccessToken);
+      } else {
+        // Aucune image retournée par l'API
+        await sendMessage(senderId, { text: 'Aucune image n’a été générée. Veuillez essayer avec un autre prompt.' }, pageAccessToken);
+      }
     } catch (error) {
-      console.error('Error:', error);
-      await sendMessage(senderId, { text: 'Error: Could not fetch images.' }, pageAccessToken);
+      // Gestion des erreurs
+      console.error('Erreur lors de la génération de l’image :', error);
+      await sendMessage(senderId, { text: 'Erreur : Impossible de générer l’image. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
-  }
+  },
 };
