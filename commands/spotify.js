@@ -14,8 +14,12 @@ module.exports = {
       // Indiquer que l'image est en cours de génération
       await sendMessage(senderId, { text: `🎨 Génération de votre image avec le prompt : "${prompt}"...` }, pageAccessToken);
 
+      // Construire l'URL de l'API avec les paramètres
+      const width = 1024;
+      const height = 1024;
+      const apiUrl = `https://api.kenliejugarap.com/turbo-image-gen/?width=${width}&height=${height}&prompt=${encodeURIComponent(prompt)}`;
+
       // Appeler l'API de génération d'image
-      const apiUrl = `https://joshweb.click/api/flux?prompt=${encodeURIComponent(prompt)}&model=4`;
       const response = await axios.get(apiUrl);
 
       // Vérifier si l'API renvoie une URL valide
