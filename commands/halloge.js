@@ -1,74 +1,56 @@
-const axios = require("axios");
+const axios = require('axios');
 
 module.exports = {
-  name: 'black',
-  description: 'Blackbox AI assistant by Kenlie Navacilla Jugarap',
-  author: 'KENLIEPLAYS',
-
+  name: 'blackbox',
+  description: 'Pose une question à l\'API Blackbox et reçoit une réponse.',
+  author: 'Deku',
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    const query = args.join(" ").toLowerCase() || "How can I help you?";
-    const defaultResponse = "🗃 | 𝙱𝚕𝚊𝚌𝚔 𝙱𝚘𝚡 | \n━━━━━━━━━━━━━━━━\nHello! How can I help you?\n━━━━━━━━━━━━━━━━";
+    const prompt = args.join(' ');
 
-    if (query === "hello" || query === "hi") {
-      return await sendMessage(senderId, { text: defaultResponse }, pageAccessToken);
+    // Vérifier si une question a été posée
+    if (!prompt) {
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
-    // Envoyer un message indiquant que Blackbox est en train de répondre
-    await sendMessage(senderId, { text: '🗃 | 𝙱𝚕𝚊𝚌𝚔 𝙱𝚘𝚡 |\nVeuillez patienter pendant la réponse...' }, pageAccessToken);
-
     try {
-      const responseMessage = await getMessage(args.join(" "));
-      const formattedResponse = formatResponse(responseMessage);
+      // Informer l'utilisateur que le bot répond
+      await sendMessage(senderId, { text: '💬 Blackbox est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Envoyer la réponse formatée (gestion des messages longs)
-      await handleLongResponse(formattedResponse, senderId, pageAccessToken, sendMessage);
+      // URL de l'API avec la question encodée
+      const apiUrl = `https://api.kenliejugarap.com/blackbox-pro/?text=${encodeURIComponent(prompt)}`;
+      const response = await axios.get(apiUrl);
 
+      // Récupérer la réponse
+      const text = response.data.result || "Désolé, je n'ai pas pu obtenir de réponse.";
+
+      // Formater la réponse
+      const formattedResponse = `─────★─────\n` +
+                                `✨Blackbox Response\n\n${text}\n` +
+                                `─────★─────`;
+
+      // Gérer les réponses longues
+      const maxMessageLength = 2000;
+      if (formattedResponse.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+        for (const message of messages) {
+          await sendMessage(senderId, { text: message }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      }
     } catch (error) {
-      console.error("Erreur avec l'API Blackbox :", error);
-      await sendMessage(senderId, { text: 'Erreur : Une erreur est survenue lors de la connexion à Blackbox. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Error calling Blackbox API:', error);
+      // Envoyer un message d'erreur à l'utilisateur
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour appeler l'API Blackbox
-async function getMessage(yourMessage) {
-  try {
-    const res = await axios.get(`https://api.kenliejugarap.com/blackbox?text=${encodeURIComponent(yourMessage)}`);
-    let response = res.data.response || "Aucune réponse de l'API.";
-    
-    // Supprimer la partie concernant le clic sur le lien
-    response = response.replace(/\n\nIs this answer helpful to you\? Kindly click the link below\nhttps:\/\/click2donate\.kenliejugarap\.com\n\(Clicking the link and clicking any ads or button and wait for 30 seconds \(3 times\) everyday is a big donation and help to us to maintain the servers, last longer, and upgrade servers in the future\)/, '');
-    
-    return response;
-  } catch (error) {
-    console.error("Erreur lors de l'obtention du message :", error);
-    throw error;
-  }
-}
-
-// Fonction pour formater la réponse avec un style et un contour
-function formatResponse(text) {
-  return `🗃 | 𝙱𝚕𝚊𝚌𝚔 𝙱𝚘𝚡 |\n━━━━━━━━━━━━━━━━\n${text}\n━━━━━━━━━━━━━━━━`;
-}
-
-// Fonction pour découper les messages en morceaux de 2000 caractères
+// Fonction pour découper les messages longs
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
     chunks.push(message.slice(i, i + chunkSize));
   }
   return chunks;
-}
-
-// Fonction pour gérer les messages longs de plus de 2000 caractères
-async function handleLongResponse(response, senderId, pageAccessToken, sendMessage) {
-  const maxMessageLength = 2000;
-  if (response.length > maxMessageLength) {
-    const messages = splitMessageIntoChunks(response, maxMessageLength);
-    for (const message of messages) {
-      await sendMessage(senderId, { text: message }, pageAccessToken);
-    }
-  } else {
-    await sendMessage(senderId, { text: response }, pageAccessToken);
-  }
 }
