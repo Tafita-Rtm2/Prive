@@ -13,7 +13,7 @@ module.exports = {
 
     try {
       // Envoyer un message indiquant que Blackbox Claude est en train de répondre
-      await sendMessage(senderId, { text: '💬 Blackbox Claude est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(senderId, { text: '💬  Claude haiku est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
       // Construire l'URL de l'API avec le texte de la question
       const apiUrl = `https://api.kenliejugarap.com/blackbox-claude/?text=${encodeURIComponent(prompt)}`;
@@ -27,7 +27,7 @@ module.exports = {
 
       // Ajouter un style à la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨Blackbox Claude\n\n${text}\n` +
+                                `✨haiku Claude\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues de plus de 2000 caractères
