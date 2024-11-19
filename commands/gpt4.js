@@ -1,36 +1,36 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'ai-claude',
-  description: 'Pose une question à l\'API Blackbox Claude.',
-  author: 'Deku (API Blackbox Claude)',
-  
+  name: 'claude-ai',
+  description: 'Pose une question à Blackbox Claude.',
+  author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "❌ Veuillez entrer une question valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que l'IA réfléchit
-      await sendMessage(senderId, { text: '💬  Claude ai réfléchit...⏳\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message indiquant que Blackbox Claude est en train de répondre
+      await sendMessage(senderId, { text: '💬 Blackbox Claude est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Construire l'URL de l'API Blackbox Claude
+      // Construire l'URL de l'API avec le texte de la question
       const apiUrl = `https://api.kenliejugarap.com/blackbox-claude/?text=${encodeURIComponent(prompt)}`;
-
-      // Appeler l'API
       const response = await axios.get(apiUrl);
 
-      // Extraire la réponse
-      const text = response.data.result;
+      // Vérifier si l'API a retourné une réponse valide
+      const text = response.data?.response;
+      if (!text) {
+        throw new Error("Réponse invalide de l'API.");
+      }
 
-      // Créer un style pour la réponse de Blackbox Claude
+      // Ajouter un style à la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨ Claude 🤖\n\n${text}\n` +
+                                `✨Blackbox Claude\n\n${text}\n` +
                                 `─────★─────`;
 
-      // Gérer les réponses longues
+      // Gérer les réponses longues de plus de 2000 caractères
       const maxMessageLength = 2000;
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
@@ -42,9 +42,9 @@ module.exports = {
       }
 
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Blackbox Claude :', error);
-      // Envoyer un message d'erreur
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de l\'appel à l\'API Blackbox Claude:', error);
+      // Message de réponse d'erreur
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
