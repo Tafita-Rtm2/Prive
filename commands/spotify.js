@@ -56,6 +56,12 @@ module.exports = {
 
       // Supprimer le fichier temporaire après l'envoi
       fs.unlinkSync(audioPath);
+
+      // Étape 5 : Envoyer un message d'instruction après le vocal
+      await sendMessage(senderId, { 
+        text: "✅ Votre vocal a été envoyé avec succès. 🎧\n\n👉 Cliquez sur le bouton menu pour quitter le mode texte-to-speech et accéder aux menus." 
+      }, pageAccessToken);
+
     } catch (error) {
       console.error('Erreur lors de la génération ou de l\'envoi de l\'audio :', error);
 
