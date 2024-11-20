@@ -19,7 +19,8 @@ module.exports = {
       const apiUrl = `https://api.kenliejugarap.com/blackbox-gpt4o/?text=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      const text = response.data; // Assurez-vous que la réponse de l'API est dans ce format
+      // S'assurer que la réponse contient bien du texte
+      const text = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
 
       // Créer un style avec un contour pour la réponse de GPT-4
       const formattedResponse = `─────★─────\n` +
