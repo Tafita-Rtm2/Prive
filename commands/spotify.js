@@ -1,52 +1,62 @@
 const axios = require('axios');
+const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
-const { sendMessage } = require('../handles/sendMessage'); // Fonction d'envoi de message
 
-// Charger le token pour envoyer des messages
-const tokenPath = './token.txt';
-const pageAccessToken = fs.readFileSync(tokenPath, 'utf8').trim();
+// Lecture du token d'accès pour l'envoi des messages
+const token = fs.readFileSync('token.txt', 'utf8');
+
+// Dictionnaire pour suivre le dernier horodatage de chaque utilisateur
+const lastUsage = {};
 
 module.exports = {
-  name: 'imagegen',
-  description: 'Generate an image with a prompt and send it to the user.',
-  usage: '-imagegen [prompt]',
-  author: 'coffee',
+  name: 'imagen',
+  description: 'Generate an AI-based image with a 2-minute cooldown',
+  author: 'help',
+  usage:'imagine dog',
 
   async execute(senderId, args) {
-    // Vérifier si le prompt est fourni
-    if (!args || args.length === 0) {
-      await sendMessage(senderId, { text: 'Veuillez fournir un prompt pour générer une image.' }, pageAccessToken);
-      return;
+    const pageAccessToken = token;
+    const prompt = args.join(' ').trim();
+
+    // Vérifie que l'utilisateur a bien entré une commande
+    if (!prompt) {
+      return await sendMessage(senderId, { text: 'Please provide a prompt for the image generator.' }, pageAccessToken);
     }
 
-    // Construire le prompt à partir des arguments fournis par l'utilisateur
-    const prompt = args.join(' ');
+    // Vérifier l'intervalle de 2 minutes pour cet utilisateur
+    const currentTime = Date.now();
+    const cooldownPeriod = 2 * 60 * 1000; // 2 minutes en millisecondes
 
-    // Construire l'URL de l'API avec le prompt
-    const apiUrl = `https://api.kenliejugarap.com/flux-realism-v2/?prompt=${encodeURIComponent(prompt)}`;
+    if (lastUsage[senderId] && currentTime - lastUsage[senderId] < cooldownPeriod) {
+      const remainingTime = Math.ceil((cooldownPeriod - (currentTime - lastUsage[senderId])) / 1000);
+      return await sendMessage(senderId, { text: `Please wait ${remainingTime} seconds before using this command again.` }, pageAccessToken);
+    }
+
+    // Mettre à jour le dernier horodatage d'utilisation de la commande
+    lastUsage[senderId] = currentTime;
 
     try {
+      sendMessage(senderId, { text: 'Generation de l image en cours...🤩' }, pageAccessToken);
       // Appel à l'API pour générer l'image
-      const { data } = await axios.get(apiUrl);
+      const apiUrl = `https://ccprojectapis.ddns.net/api/blackbox/gen?prompt=${encodeURIComponent(prompt)}`;
+      const response = await axios.get(apiUrl);
+      const data = response.data;
 
-      // Vérifier si l'API a renvoyé une URL valide pour l'image
-      if (data && data.imageUrl) {
-        // Construire le message avec l'image
-        const attachment = {
-          type: 'image',
-          payload: { url: data.imageUrl }, // URL de l'image générée
-        };
+      // Extraire l'URL de l'image de la réponse
+      const imageUrlMatch = data.response.match(/\((https:\/\/[^\)]+)\)/);
+      const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
 
-        // Envoyer l'image directement à l'utilisateur
-        await sendMessage(senderId, { attachment }, pageAccessToken);
+      if (imageUrl) {
+        await sendMessage(senderId, {
+          attachment: { type: 'image', payload: { url: imageUrl } }
+        }, pageAccessToken);
       } else {
-        // Aucune image retournée par l'API
-        await sendMessage(senderId, { text: 'Aucune image n’a été générée. Veuillez essayer avec un autre prompt.' }, pageAccessToken);
+        await sendMessage(senderId, { text: `Failed to generate image. Please try a different prompt.` }, pageAccessToken);
       }
+
     } catch (error) {
-      // Gestion des erreurs
-      console.error('Erreur lors de la génération de l’image :', error);
-      await sendMessage(senderId, { text: 'Erreur : Impossible de générer l’image. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Error:', error);
+      await sendMessage(senderId, { text: 'Error: Unexpected error while generating image.' }, pageAccessToken);
     }
-  },
+  }
 };
