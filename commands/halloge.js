@@ -1,31 +1,33 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'blackbox',
-  description: 'Pose une question à l\'API Blackbox et reçoit une réponse.',
-  author: 'Deku',
+  name: 'blackbox-bot',
+  description: 'Pose une question à l\'API Blackbox et renvoie la réponse.',
+  author: 'Custom (Blackbox API)',
+
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    // Vérifier si une question a été posée
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "❌ Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      // Informer l'utilisateur que le bot répond
-      await sendMessage(senderId, { text: '💬 Blackbox est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message indiquant que l'IA réfléchit
+      await sendMessage(senderId, { text: '💬 Blackbox réfléchit...⏳\n\n─────★─────' }, pageAccessToken);
 
-      // URL de l'API avec la question encodée
-      const apiUrl = `https://api.kenliejugarap.com/blackbox-pro/?text=${encodeURIComponent(prompt)}`;
+      // Construire l'URL de l'API Blackbox
+      const apiUrl = `https://api.kenliejugarap.com/blackbox/?text=${encodeURIComponent(prompt)}`;
+
+      // Appeler l'API
       const response = await axios.get(apiUrl);
 
-      // Récupérer la réponse
-      const text = response.data.result || "Désolé, je n'ai pas pu obtenir de réponse.";
+      // Extraire la réponse
+      const text = response.data.result || "❌ Pas de réponse reçue de l'API.";
 
-      // Formater la réponse
+      // Créer un style pour la réponse de Blackbox
       const formattedResponse = `─────★─────\n` +
-                                `✨Blackbox Response\n\n${text}\n` +
+                                `✨Blackbox 🤖\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues
@@ -38,15 +40,16 @@ module.exports = {
       } else {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
+
     } catch (error) {
-      console.error('Error calling Blackbox API:', error);
-      // Envoyer un message d'erreur à l'utilisateur
-      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de l\'appel à l\'API Blackbox :', error);
+      // Envoyer un message d'erreur
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour découper les messages longs
+// Fonction pour découper les messages en morceaux de 2000 caractères
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
