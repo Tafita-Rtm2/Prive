@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'turbo-image-gen',
+  name: 'turbo',
   description: 'Génère une image à partir d\'un prompt via l\'API Turbo Image Generator.',
   author: 'Custom',
 
