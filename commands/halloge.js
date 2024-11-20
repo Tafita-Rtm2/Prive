@@ -1,4 +1,4 @@
-const axios = require('axios');
+const axios = require('axios'); 
 const fs = require('fs');
 const path = require('path');
 
@@ -6,7 +6,7 @@ module.exports = {
   name: 'image-gen',
   description: 'Génère une image via l\'API et l\'envoie à l\'utilisateur.',
   author: 'Deku',
-  
+
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
@@ -53,6 +53,12 @@ module.exports = {
 
       // Supprimer le fichier temporaire après l'envoi
       fs.unlinkSync(imagePath);
+
+      // Étape 5 : Envoyer un message d'instruction après l'image
+      await sendMessage(senderId, { 
+        text: "✅ Votre image a été envoyée avec succès. 🎨\n\n👉 Cliquez sur le bouton menu pour accéder aux autres options et fonctionnalités. 🚀" 
+      }, pageAccessToken);
+
     } catch (error) {
       console.error('Erreur lors de la génération ou de l\'envoi de l\'image :', error);
 
