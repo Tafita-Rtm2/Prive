@@ -4,22 +4,26 @@ const path = require('path');
 
 module.exports = {
   name: 'text-to-audio',
-  description: 'Transforme un texte en audio et l\'envoie à l\'utilisateur via Messenger.',
+  description: 'Transforme un texte en audio avec un ID dynamique et l\'envoie à l\'utilisateur via Messenger.',
   author: 'Deku',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    const text = args.join(' ');
-
-    if (!text) {
+    if (!args.length) {
       return sendMessage(senderId, { text: "❌ Veuillez fournir un texte valide pour générer un audio." }, pageAccessToken);
     }
+
+    // Extraction du texte et de l'ID (si fourni)
+    const input = args.join(' ');
+    const idMatch = input.match(/-(\d+)$/); // Recherche d'un ID à la fin du texte
+    const id = idMatch ? idMatch[1] : 3; // Utilise l'ID trouvé ou 3 par défaut
+    const text = idMatch ? input.replace(/-(\d+)$/, '').trim() : input; // Retire l'ID du texte
 
     try {
       // Étape 1 : Informer l'utilisateur que l'audio est en cours de génération
       await sendMessage(senderId, { text: "🎙️ Génération de votre audio en cours... Veuillez patienter quelques instants ⏳" }, pageAccessToken);
 
       // Étape 2 : Appeler l'API pour générer l'audio
-      const apiUrl = `https://joshweb.click/api/aivoice?q=${encodeURIComponent(text)}&id=3`;
+      const apiUrl = `https://joshweb.click/api/aivoice?q=${encodeURIComponent(text)}&id=${id}`;
 
       const response = await axios({
         url: apiUrl,
