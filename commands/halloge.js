@@ -15,7 +15,10 @@ module.exports = {
     }
 
     try {
-      // Étape 1 : Appeler l'API pour générer l'image
+      // Étape 1 : Informer l'utilisateur que l'image est en cours de génération
+      await sendMessage(senderId, { text: "✨ Génération de votre image en cours... Veuillez patienter quelques instants ⏳" }, pageAccessToken);
+
+      // Étape 2 : Appeler l'API pour générer l'image
       const apiUrl = `https://api.kenliejugarap.com/turbo-image-gen/?width=1024&height=1024&prompt=${encodeURIComponent(prompt)}`;
       
       // Appel à l'API pour récupérer l'image
@@ -31,11 +34,11 @@ module.exports = {
         throw new Error("L'API n'a pas renvoyé une image valide.");
       }
 
-      // Étape 2 : Sauvegarder l'image localement
+      // Étape 3 : Sauvegarder l'image localement
       const imagePath = path.resolve(__dirname, 'generated-image.jpg');
       fs.writeFileSync(imagePath, response.data);
 
-      // Étape 3 : Envoyer l'image via l'API de Facebook
+      // Étape 4 : Envoyer l'image via l'API de Facebook
       const formData = {
         recipient: JSON.stringify({ id: senderId }),
         message: JSON.stringify({ attachment: { type: 'image', payload: {} } }),
