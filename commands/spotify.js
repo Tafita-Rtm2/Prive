@@ -1,62 +1,62 @@
 const axios = require('axios');
-const { sendMessage } = require('../handles/sendMessage');
 const fs = require('fs');
-
-// Lecture du token d'accès pour l'envoi des messages
-const token = fs.readFileSync('token.txt', 'utf8');
-
-// Dictionnaire pour suivre le dernier horodatage de chaque utilisateur
-const lastUsage = {};
+const path = require('path');
 
 module.exports = {
-  name: 'imagen',
-  description: 'Generate an AI-based image with a 2-minute cooldown',
-  author: 'help',
-  usage:'imagine dog',
+  name: 'text-to-audio',
+  description: 'Transforme un texte en audio et l\'envoie à l\'utilisateur via Messenger.',
+  author: 'Deku',
 
-  async execute(senderId, args) {
-    const pageAccessToken = token;
-    const prompt = args.join(' ').trim();
+  async execute(senderId, args, pageAccessToken, sendMessage) {
+    const text = args.join(' ');
 
-    // Vérifie que l'utilisateur a bien entré une commande
-    if (!prompt) {
-      return await sendMessage(senderId, { text: 'Please provide a prompt for the image generator.' }, pageAccessToken);
+    if (!text) {
+      return sendMessage(senderId, { text: "❌ Veuillez fournir un texte valide pour générer un audio." }, pageAccessToken);
     }
-
-    // Vérifier l'intervalle de 2 minutes pour cet utilisateur
-    const currentTime = Date.now();
-    const cooldownPeriod = 2 * 60 * 1000; // 2 minutes en millisecondes
-
-    if (lastUsage[senderId] && currentTime - lastUsage[senderId] < cooldownPeriod) {
-      const remainingTime = Math.ceil((cooldownPeriod - (currentTime - lastUsage[senderId])) / 1000);
-      return await sendMessage(senderId, { text: `Please wait ${remainingTime} seconds before using this command again.` }, pageAccessToken);
-    }
-
-    // Mettre à jour le dernier horodatage d'utilisation de la commande
-    lastUsage[senderId] = currentTime;
 
     try {
-      sendMessage(senderId, { text: 'Generation de l image en cours...🤩' }, pageAccessToken);
-      // Appel à l'API pour générer l'image
-      const apiUrl = `https://ccprojectapis.ddns.net/api/blackbox/gen?prompt=${encodeURIComponent(prompt)}`;
-      const response = await axios.get(apiUrl);
-      const data = response.data;
+      // Étape 1 : Informer l'utilisateur que l'audio est en cours de génération
+      await sendMessage(senderId, { text: "🎙️ Génération de votre audio en cours... Veuillez patienter quelques instants ⏳" }, pageAccessToken);
 
-      // Extraire l'URL de l'image de la réponse
-      const imageUrlMatch = data.response.match(/\((https:\/\/[^\)]+)\)/);
-      const imageUrl = imageUrlMatch ? imageUrlMatch[1] : null;
+      // Étape 2 : Appeler l'API pour générer l'audio
+      const apiUrl = `https://joshweb.click/api/aivoice?q=${encodeURIComponent(text)}&id=3`;
 
-      if (imageUrl) {
-        await sendMessage(senderId, {
-          attachment: { type: 'image', payload: { url: imageUrl } }
-        }, pageAccessToken);
-      } else {
-        await sendMessage(senderId, { text: `Failed to generate image. Please try a different prompt.` }, pageAccessToken);
+      const response = await axios({
+        url: apiUrl,
+        method: 'GET',
+        responseType: 'arraybuffer', // Important pour gérer le fichier binaire (audio)
+      });
+
+      // Vérification : l'API renvoie bien un contenu audio
+      const contentType = response.headers['content-type'];
+      if (!contentType.startsWith('audio/')) {
+        throw new Error("L'API n'a pas renvoyé un fichier audio valide.");
       }
 
+      // Étape 3 : Sauvegarder l'audio localement
+      const audioPath = path.resolve(__dirname, 'generated-audio.mp3');
+      fs.writeFileSync(audioPath, response.data);
+
+      // Étape 4 : Envoyer l'audio via l'API de Facebook
+      const formData = {
+        recipient: JSON.stringify({ id: senderId }),
+        message: JSON.stringify({ attachment: { type: 'audio', payload: {} } }),
+        filedata: fs.createReadStream(audioPath),
+      };
+
+      const fbResponse = await axios.post(`https://graph.facebook.com/v17.0/me/messages?access_token=${pageAccessToken}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      console.log('Audio envoyé avec succès:', fbResponse.data);
+
+      // Supprimer le fichier temporaire après l'envoi
+      fs.unlinkSync(audioPath);
     } catch (error) {
-      console.error('Error:', error);
-      await sendMessage(senderId, { text: 'Error: Unexpected error while generating image.' }, pageAccessToken);
+      console.error('Erreur lors de la génération ou de l\'envoi de l\'audio :', error);
+
+      // Informer l'utilisateur de l'erreur
+      await sendMessage(senderId, { text: "❌ Une erreur est survenue lors de la génération ou de l'envoi de l'audio." }, pageAccessToken);
     }
-  }
+  },
 };
