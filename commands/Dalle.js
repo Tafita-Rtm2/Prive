@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'chatgpt4-o',
+  name: 'gpt4-o',
   description: 'Pose une question à GPT-4o via l\'API fournie.',
   author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -21,8 +21,8 @@ module.exports = {
       // Faire la requête à l'API
       const response = await axios.get(apiUrl);
 
-      // S'assurer que la réponse est du texte
-      const text = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+      // Extraire uniquement la réponse du champ "response"
+      const text = response.data.response;
 
       // Formater la réponse
       const formattedResponse = `─────★─────\n` +
