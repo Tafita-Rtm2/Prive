@@ -1,33 +1,30 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gemma-7b',
-  description: 'Pose une question à l\'API Gemma-7b ou analyse une image.',
-  author: 'Deku (Gemma API)',
-  
+  name: 'meta-ai',
+  description: 'Pose une question à Meta AI via l’API fournie.',
+  author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "❌ Veuillez entrer une question valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que l'IA réfléchit
-      await sendMessage(senderId, { text: '💬 Gemma-7b réfléchit...⏳\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message indiquant que Meta AI est en train de répondre
+      await sendMessage(senderId, { text: '💬 Meta AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Construire l'URL de l'API Gemma-7b
-      const apiUrl = `https://joshweb.click/api/gemma-7b?q=${encodeURIComponent(prompt)}`;
-
-      // Appeler l'API
+      // Construire l'URL de l'API Meta AI
+      const apiUrl = `https://api.kenliejugarap.com/llama/?question=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      // Extraire la réponse
-      const text = response.data.result;
+      // Vérifier si la réponse contient le texte attendu
+      const text = response.data.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
 
-      // Créer un style pour la réponse de Gemma-7b
+      // Formater la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨Gemma-7b 🤖\n\n${text}\n` +
+                                `✨Meta AI\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues
@@ -42,14 +39,14 @@ module.exports = {
       }
 
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Gemma-7b :', error);
-      // Envoyer un message d'erreur
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de l\'appel à l\'API Meta AI :', error);
+      // Envoyer un message d'erreur en cas de problème
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour découper les messages en morceaux de 2000 caractères
+// Fonction pour découper les messages longs
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
