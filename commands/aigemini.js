@@ -15,9 +15,7 @@ module.exports = {
       // Envoyer un message indiquant que Gemini est en train de répondre
       await sendMessage(
         senderId,
-        {
-          text: '💬 Gemini est en train de réfléchir à ta question...⏳\n\n─────★─────'
-        },
+        { text: '💬 Gemini est en train de réfléchir à ta question...⏳\n\n─────★─────' },
         pageAccessToken
       );
 
@@ -27,16 +25,17 @@ module.exports = {
       // Effectuer la requête à l'API
       const response = await axios.get(apiUrl);
 
-      // Vérifier que la réponse contient des données valides
-      const text = response.data;
-      if (!text) {
-        throw new Error('Réponse invalide ou vide de l\'API.');
+      // Vérifier que la réponse contient le champ "response"
+      const text = response.data.response; // La réponse principale
+
+      if (!text || typeof text !== 'string') {
+        throw new Error('La réponse de l\'API est invalide ou vide.');
       }
 
       // Formater la réponse
       const formattedResponse = `─────★─────\n✨ **Gemini**\n\n${text.trim()}\n─────★─────`;
 
-      // Vérifier si la réponse dépasse la longueur maximale (2000 caractères)
+      // Envoyer la réponse formatée
       const maxMessageLength = 2000;
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
@@ -53,9 +52,7 @@ module.exports = {
       // Envoyer un message d'erreur en cas de problème
       await sendMessage(
         senderId,
-        {
-          text: '❌ Désolé, une erreur est survenue lors de l\'appel à l\'API Gemini. Veuillez réessayer plus tard.'
-        },
+        { text: '❌ Désolé, une erreur est survenue lors de l\'appel à l\'API Gemini. Veuillez réessayer plus tard.' },
         pageAccessToken
       );
     }
