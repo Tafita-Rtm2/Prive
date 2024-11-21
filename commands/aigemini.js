@@ -1,9 +1,8 @@
 const axios = require('axios');
-const path = require('path');
 
 module.exports = {
-  name: 'meta-ai',
-  description: 'Pose une question à GPT-4o webscrapers ou répond à une image.',
+  name: 'gemini',
+  description: 'Pose une question à Gemini via l’API fournie.',
   author: 'Deku (rest api)',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
@@ -13,32 +12,22 @@ module.exports = {
     }
 
     try {
-      // Envoyer un message indiquant que GPT-4 est en train de répondre
-      await sendMessage(senderId, { text: '☑meta ai est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message indiquant que Gemini est en train de répondre
+      await sendMessage(senderId, { text: '💬 Gemini est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Si le message auquel on répond contient une image
-      if (args.length === 0) {
-        const repliedMessage = await fetchRepliedMessage(senderId, pageAccessToken); // Fonction simulée pour obtenir le message répondu
-        if (repliedMessage && repliedMessage.attachments && repliedMessage.attachments[0].type === 'image') {
-          const imageUrl = repliedMessage.attachments[0].url;
-          const query = "Décris cette image.";
-          await handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken);
-          return;
-        }
-      }
-
-      // URL pour appeler l'API GPT-4o avec une question
-      const apiUrl = `https://joshweb.click/ai/llama-3-8b?q=${encodeURIComponent(prompt)}&uid=100${senderId}`;
+      // Construire l'URL de l'API Gemini
+      const apiUrl = `https://ccprojectapis.ddns.net/api/gen?ask=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      const text = response.data.result;
+      // Vérifier si la réponse contient un champ "response"
+      const text = response.data.response || 'Désolé, je n\'ai pas pu comprendre la réponse.';
 
-      // Créer un style avec un contour pour la réponse de GPT-4
+      // Formater la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨Meta ai ✔\n\n${text}\n` +
+                                `✨Gemini\n\n${text}\n` +
                                 `─────★─────`;
 
-      // Gérer les réponses longues de plus de 2000 caractères
+      // Gérer les réponses longues
       const maxMessageLength = 2000;
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
@@ -50,30 +39,14 @@ module.exports = {
       }
 
     } catch (error) {
-      console.error('Error calling GPT-4 API:', error);
-      // Message de réponse d'erreur
+      console.error('Erreur lors de l\'appel à l\'API Gemini :', error);
+      // Envoyer un message d'erreur en cas de problème
       await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour gérer les images
-async function handleImage(senderId, imageUrl, query, sendMessage, pageAccessToken) {
-  try {
-    const apiUrl = `https://joshweb.click/ai/llama-3-8b?q=${encodeURIComponent(query)}&url=${encodeURIComponent(imageUrl)}`;
-    const { data } = await axios.get(apiUrl);
-    const formattedResponse = `─────★─────\n` +
-                              `✨gemini 🤖🇲🇬\n\n${data.gemini}\n` +
-                              `─────★─────`;
-
-    await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-  } catch (error) {
-    console.error('Error handling image:', error);
-    await sendMessage(senderId, { text: "Désolé, je n'ai pas pu analyser l'image." }, pageAccessToken);
-  }
-}
-
-// Fonction pour découper les messages en morceaux de 2000 caractères
+// Fonction pour découper les messages longs
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
