@@ -4,10 +4,10 @@ const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
-const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec une date d'expiration
+const userStates = new Map(); // États des utilisateurs
+const userSubscriptions = new Map(); // Abonnements utilisateurs
 const validCodes = ["2201", "1206", "0612", "1212", "2003"];
-const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
+const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -20,8 +20,15 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Vérifier si l'utilisateur est abonné
+  // Vérification d'abonnement avant toute action
   const isSubscribed = checkSubscription(senderId);
+
+  if (!isSubscribed) {
+    await sendMessage(senderId, {
+      text: "❌ Vous n'avez pas d'abonnement actif. Veuillez entrer un code valide pour accéder aux fonctionnalités."
+    }, pageAccessToken);
+    return;
+  }
 
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
@@ -34,7 +41,7 @@ async function handleMessage(event, pageAccessToken) {
       const expirationDate = Date.now() + subscriptionDuration;
       userSubscriptions.set(senderId, expirationDate);
       await sendMessage(senderId, {
-        text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
+        text: `✅ Code validé ! Votre abonnement est actif jusqu'au ${new Date(expirationDate).toLocaleDateString()}.`
       }, pageAccessToken);
 
       const helpCommand = commands.get('help');
@@ -51,13 +58,6 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Vérifier si l'utilisateur est en mode d'analyse d'image
-    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
-      const { imageUrl } = userStates.get(senderId);
-      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
-      return;
-    }
-
     // Vérification si le message correspond au nom d'une commande
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
@@ -67,16 +67,16 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Basculé de la commande '${previousCommand}' vers '${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous êtes passé de '${previousCommand}' à '${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant active. Tapez 'stop' pour quitter.` }, pageAccessToken);
       }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    // Si une commande est verrouillée
+    // Commande verrouillée
     if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
       const lockedCommand = userStates.get(senderId).lockedCommand;
       const lockedCommandInstance = commands.get(lockedCommand);
@@ -84,12 +84,12 @@ async function handleMessage(event, pageAccessToken) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await sendMessage(senderId, { text: "Commande non reconnue. Essayez 'help' pour une liste des commandes disponibles." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Commande inconnue. Essayez 'help' pour la liste des commandes disponibles." }, pageAccessToken);
     }
   }
 }
 
-// Demander le prompt pour analyser l'image
+// Demande de prompt pour analyse d'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
   await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous faire avec cette image ?" }, pageAccessToken);
@@ -98,7 +98,7 @@ async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
 // Analyser une image avec un prompt
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    await sendMessage(senderId, { text: "🔍 Traitement en cours, veuillez patienter..." }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Traitement de votre image..." }, pageAccessToken);
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
     if (imageAnalysis) {
@@ -113,7 +113,7 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
   }
 }
 
-// Analyse d'image via API Gemini
+// Appel à l'API Gemini
 async function analyzeImageWithGemini(imageUrl, prompt) {
   const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
 
@@ -126,12 +126,12 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
   }
 }
 
-// Vérification d'abonnement
+// Vérifier l'abonnement de l'utilisateur
 function checkSubscription(senderId) {
   const expirationDate = userSubscriptions.get(senderId);
-  if (!expirationDate) return false;
-  if (Date.now() < expirationDate) return true;
-  userSubscriptions.delete(senderId);
+  if (!expirationDate) return false; // Pas d'abonnement
+  if (Date.now() < expirationDate) return true; // Abonnement valide
+  userSubscriptions.delete(senderId); // Supprimer si expiré
   return false;
 }
 
