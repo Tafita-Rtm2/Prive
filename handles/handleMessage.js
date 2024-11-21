@@ -13,6 +13,9 @@ for (const file of commandFiles) {
   commands.set(command.name, command);
 }
 
+// Liste des codes d'abonnement valides (peut être stockée en base de données ou fichier)
+const validSubscriptionCodes = ['CODE123', 'CODE456', 'CODE789'];
+
 // Durée de l'abonnement (30 jours en millisecondes)
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000;
 
@@ -20,21 +23,12 @@ const subscriptionDuration = 30 * 24 * 60 * 60 * 1000;
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Obtenir l'ID utilisateur unique via l'API
-  let uniqueUserId;
-  try {
-    uniqueUserId = await fetchUserId(`https://www.facebook.com/${senderId}`);
-  } catch (error) {
-    await sendMessage(senderId, { text: "❌ Impossible de vérifier votre identité. Réessayez plus tard." }, pageAccessToken);
-    return;
-  }
-
   // Initialiser l'état de l'utilisateur si nécessaire
-  if (!userStates.has(uniqueUserId)) {
-    userStates.set(uniqueUserId, { subscriptionDate: null, expirationDate: null });
+  if (!userStates.has(senderId)) {
+    userStates.set(senderId, { subscriptionDate: null, expirationDate: null });
   }
 
-  const userState = userStates.get(uniqueUserId);
+  const userState = userStates.get(senderId);
   const isSubscriptionActive = userState.expirationDate && Date.now() < userState.expirationDate;
 
   // Vérifier si l'utilisateur envoie un texte
@@ -52,24 +46,28 @@ async function handleMessage(event, pageAccessToken) {
         }, pageAccessToken);
       } else {
         await sendMessage(senderId, {
-          text: `💡 Vous n'êtes pas abonné. Utilisez un code d'abonnement valide ou contactez-nous :\n- Par MVola : +261385858330\n- Facebook : [RTM Tafitaniaina](https://www.facebook.com/manarintso.niaina).\nL'abonnement coûte 3000 Ar pour 30 jours.`
+          text: `💡 Vous n'êtes pas abonné. Utilisez un code d'abonnement valide ou contactez-nous pour en obtenir un :\n\n- Par MVola : +261385858330\n- Facebook : [RTM Tafitaniaina](https://www.facebook.com/manarintso.niaina).\nL'abonnement coûte 3000 Ar pour 30 jours.`
         }, pageAccessToken);
       }
       return;
     }
 
     // Vérifier si un code d'abonnement valide est envoyé
-    const validCodes = ['CODE123', 'CODE456']; // Remplacez par vos codes d'abonnement valides
-    if (validCodes.includes(messageText)) {
+    if (validSubscriptionCodes.includes(messageText)) {
       if (isSubscriptionActive) {
         await sendMessage(senderId, { text: "✅ Vous êtes déjà abonné. Aucun besoin d'activer un autre code pour le moment." }, pageAccessToken);
       } else {
         const expirationDate = Date.now() + subscriptionDuration; // Ajouter 30 jours
-        userStates.set(uniqueUserId, { subscriptionDate: Date.now(), expirationDate });
+        userStates.set(senderId, { subscriptionDate: Date.now(), expirationDate });
         await sendMessage(senderId, {
           text: `✅ Code valide ! Vous êtes maintenant abonné.\n- Début : ${new Date().toLocaleString()}\n- Expire : ${new Date(expirationDate).toLocaleString()}.\nMerci de votre confiance !`
         }, pageAccessToken);
       }
+      return;
+    } else if (messageText.length === 6) { // Supposons que les codes ont une longueur de 6 caractères
+      await sendMessage(senderId, {
+        text: "❌ Code invalide. Veuillez vérifier votre code ou obtenir un code valide en vous abonnant. Tapez 'abonement' pour plus d'informations."
+      }, pageAccessToken);
       return;
     }
 
@@ -126,23 +124,8 @@ async function handleMessage(event, pageAccessToken) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'menu'." }, pageAccessToken);
     }
-  }
-}
-
-// Fonction pour récupérer l'ID utilisateur unique
-async function fetchUserId(fbUrl) {
-  try {
-    const response = await axios.get(`https://ccprojectapis.ddns.net/api/fb?url=${encodeURIComponent(fbUrl)}`);
-    if (response.data && response.data.id) {
-      return response.data.id;
-    } else {
-      throw new Error('Impossible de récupérer l\'ID utilisateur.');
-    }
-  } catch (error) {
-    console.error('Erreur lors de la récupération de l\'ID utilisateur :', error);
-    throw new Error('Erreur de communication avec l\'API.');
   }
 }
 
@@ -164,17 +147,6 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
   } catch (error) {
     console.error('Erreur lors de l\'analyse de l\'image :', error);
     await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
-  }
-}
-
-async function analyzeImageWithGemini(imageUrl, prompt) {
-  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
-  try {
-    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
-    return response.data && response.data.answer ? response.data.answer : '';
-  } catch (error) {
-    console.error('Erreur avec Gemini :', error);
-    throw new Error('Erreur lors de l\'analyse avec Gemini');
   }
 }
 
