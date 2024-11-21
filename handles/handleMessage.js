@@ -4,7 +4,11 @@ const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
-const userStates = new Map(); // Suivi des états des utilisateurs
+const userStates = new Map(); // Suivi des états des utilisateurs et des abonnements
+
+// Liste des codes d'abonnement valides
+const validCodes = ["1206", "2201", "0612", "2003", "1212", "1203", "8280"];
+const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // 30 jours en millisecondes
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -17,12 +21,55 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
+  // Vérification de l'état de l'utilisateur
+  const userState = userStates.get(senderId) || {};
+  const isSubscriptionActive = userState.expirationDate && Date.now() < userState.expirationDate;
+
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
+
+    // Gestion de l'abonnement
+    if (messageText.toLowerCase() === 'abonement') {
+      if (isSubscriptionActive) {
+        const remainingTime = userState.expirationDate - Date.now();
+        const remainingDays = Math.floor(remainingTime / (1000 * 60 * 60 * 24));
+        const expirationDate = new Date(userState.expirationDate).toLocaleString();
+        await sendMessage(senderId, {
+          text: `✅ Vous êtes déjà abonné.\n- Début : ${new Date(userState.subscriptionDate).toLocaleString()}\n- Expire : ${expirationDate}\n- Reste : ${remainingDays} jour(s).`
+        }, pageAccessToken);
+      } else {
+        await sendMessage(senderId, {
+          text: `💡 Pour vous abonner, utilisez l'un des codes valides ou contactez-nous :\n- Par MVola : +261385858330\n- Facebook : [RTM Tafitaniaina](https://www.facebook.com/manarintso.niaina).\nL'abonnement coûte 3000 Ar pour 30 jours.`
+        }, pageAccessToken);
+      }
+      return;
+    }
+
+    // Vérification si un code d'abonnement est envoyé
+    if (validCodes.includes(messageText)) {
+      if (isSubscriptionActive) {
+        await sendMessage(senderId, { text: "✅ Vous êtes déjà abonné. Aucun besoin d'activer un autre code pour le moment." }, pageAccessToken);
+      } else {
+        const expirationDate = Date.now() + subscriptionDuration; // 30 jours à partir de maintenant
+        userStates.set(senderId, { subscriptionDate: Date.now(), expirationDate });
+        await sendMessage(senderId, {
+          text: `✅ Code valide ! Vous êtes maintenant abonné.\n- Début : ${new Date().toLocaleString()}\n- Expire : ${new Date(expirationDate).toLocaleString()}.\nMerci de votre confiance !`
+        }, pageAccessToken);
+      }
+      return;
+    }
+
+    // Bloquer l'accès si l'abonnement est inactif
+    if (!isSubscriptionActive) {
+      await sendMessage(senderId, {
+        text: "❌ Vous n'êtes pas abonné. Envoyez 'abonement' pour savoir comment vous abonner."
+      }, pageAccessToken);
+      return;
+    }
 
     // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
@@ -48,10 +95,10 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
@@ -75,18 +122,18 @@ async function handleMessage(event, pageAccessToken) {
 // Demander le prompt de l'utilisateur pour analyser l'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo !  📸😊." }, pageAccessToken);
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ?" }, pageAccessToken);
 }
 
 // Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image.  Patientez un instant... 🤔  ⏳" }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant..." }, pageAccessToken);
 
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
     if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image  :\n${imageAnalysis}` }, pageAccessToken);
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
     } else {
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
