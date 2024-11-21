@@ -24,10 +24,10 @@ async function handleMessage(event, pageAccessToken) {
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
-    // Commande "menu" pour quitter le mode actuel
-    if (messageText.toLowerCase() === 'menu') {
+    // Commande "stop" pour quitter le mode actuel
+    if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel clic sur le bouton menu pour voir les commande disponible." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
       return;
     }
 
@@ -51,7 +51,7 @@ async function handleMessage(event, pageAccessToken) {
           await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez le bouton 'menu' pour quitter🚫.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
       }
       // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
@@ -67,7 +67,7 @@ async function handleMessage(event, pageAccessToken) {
       }
     } else {
       // Sinon, traiter comme texte générique ou commande non reconnue
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'menu'." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
     }
   }
 }
