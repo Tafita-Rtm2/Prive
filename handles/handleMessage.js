@@ -3,6 +3,9 @@ const path = require('path');
 const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
+// Liste des codes valides
+const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
+const userSubscriptions = new Map(); // Suivi des abonnements des utilisateurs
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 
@@ -13,38 +16,72 @@ for (const file of commandFiles) {
   commands.set(command.name, command);
 }
 
+// Vérifier si l'utilisateur a un abonnement actif
+function isSubscriptionActive(senderId) {
+  if (!userSubscriptions.has(senderId)) return false;
+
+  const expirationDate = userSubscriptions.get(senderId);
+  const now = new Date();
+  return now <= expirationDate;
+}
+
+// Ajouter un abonnement pour un utilisateur
+function addSubscription(senderId, days = 30) {
+  const now = new Date();
+  const expirationDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  userSubscriptions.set(senderId, expirationDate);
+  return expirationDate;
+}
+
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
+  if (!isSubscriptionActive(senderId)) {
+    // Si l'utilisateur n'a pas d'abonnement actif
+    if (event.message.text) {
+      const messageText = event.message.text.trim();
+
+      // Vérification des codes d'abonnement
+      if (validCodes.includes(messageText)) {
+        const expirationDate = addSubscription(senderId);
+        await sendMessage(senderId, {
+          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\nMerci d'utiliser notre service ! 🚀`
+        }, pageAccessToken);
+      } else {
+        // Code invalide
+        await sendMessage(senderId, {
+          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 **Lien Facebook** : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 **WhatsApp** : +261 38 58 58 330\n\n💳 Abonnement : **3000 Ar** pour 30 jours.`
+        }, pageAccessToken);
+      }
+    }
+    return;
+  }
+
+  // Si l'abonnement est actif, continuer le flux existant
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
-    // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
-    // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
       await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
       return;
     }
 
-    // Vérifier si l'utilisateur est en mode d'analyse d'image
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
       const { imageUrl } = userStates.get(senderId);
       await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
     }
 
-    // Vérification si le message correspond au nom d'une commande pour déverrouiller et basculer
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
     const command = commands.get(commandName);
 
     if (command) {
-      // Si l'utilisateur était verrouillé sur une autre commande, on déverrouille
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
@@ -53,12 +90,10 @@ async function handleMessage(event, pageAccessToken) {
       } else {
         await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
       }
-      // Verrouiller sur la nouvelle commande
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    // Si l'utilisateur est déjà verrouillé sur une commande
     if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
       const lockedCommand = userStates.get(senderId).lockedCommand;
       const lockedCommandInstance = commands.get(lockedCommand);
@@ -66,7 +101,6 @@ async function handleMessage(event, pageAccessToken) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      // Sinon, traiter comme texte générique ou commande non reconnue
       await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
     }
   }
@@ -91,7 +125,6 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
 
-    // Rester en mode d'analyse d'image tant que l'utilisateur ne tape pas "stop"
     userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
   } catch (error) {
     console.error('Erreur lors de l\'analyse de l\'image :', error);
