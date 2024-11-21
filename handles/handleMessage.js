@@ -5,11 +5,6 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Enregistre les abonnements utilisateurs avec une date d'expiration
-const userFreeQuestions = new Map(); // Enregistre le nombre de questions gratuites par utilisateur par jour
-const validCodes = ["2201", "1206", "0612", "1212", "2003"];
-const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
-const subscriptionCost = 3000; // Coût de l'abonnement : 3000 AR
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -22,33 +17,12 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Vérifier si l'utilisateur est abonné
-  const isSubscribed = checkSubscription(senderId);
-
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
-
-    // Validation d'un code d'abonnement
-    if (validCodes.includes(messageText)) {
-      const expirationDate = Date.now() + subscriptionDuration;
-      userSubscriptions.set(senderId, expirationDate);
-      await sendMessage(senderId, {
-        text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
-      }, pageAccessToken);
-
-      // Exécution automatique de la commande "help" après validation
-      const helpCommand = commands.get('help');
-      if (helpCommand) {
-        await helpCommand.execute(senderId, [], pageAccessToken, sendMessage);
-      } else {
-        await sendMessage(senderId, { text: "❌ La commande 'help' n'est pas disponible." }, pageAccessToken);
-      }
-      return;
-    }
 
     // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
@@ -136,16 +110,6 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
     console.error('Erreur avec Gemini :', error);
     throw new Error('Erreur lors de l\'analyse avec Gemini');
   }
-}
-
-// Fonction pour vérifier l'abonnement de l'utilisateur
-function checkSubscription(senderId) {
-  const expirationDate = userSubscriptions.get(senderId);
-  if (!expirationDate) return false; // Pas d'abonnement
-  if (Date.now() < expirationDate) return true; // Abonnement encore valide
-  // Supprimer l'abonnement si expiré
-  userSubscriptions.delete(senderId);
-  return false;
 }
 
 module.exports = { handleMessage };
