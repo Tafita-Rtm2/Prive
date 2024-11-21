@@ -20,8 +20,8 @@ module.exports = {
       const response = await axios.get(apiUrl);
 
       // Vérifier si la réponse est valide
-      if (response.data && response.data.response) {
-        const text = response.data.response;
+      if (response.data && response.data.result) {
+        const text = response.data.result.trim(); // Supprimer les espaces ou sauts de ligne inutiles
 
         // Formater la réponse
         const formattedResponse = `─────★─────\n` +
