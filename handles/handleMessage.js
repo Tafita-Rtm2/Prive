@@ -5,7 +5,6 @@ const { sendMessage } = require('./sendMessage');
 
 // Liste des codes valides
 const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
-const userSubscriptions = new Map(); // Suivi des abonnements des utilisateurs
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 
@@ -16,20 +15,44 @@ for (const file of commandFiles) {
   commands.set(command.name, command);
 }
 
+// Chemin vers le fichier JSON pour sauvegarder les abonnements
+const subscriptionsFilePath = path.join(__dirname, '../subscriptions.json');
+
+// Charger les abonnements depuis le fichier JSON
+function loadSubscriptions() {
+  if (fs.existsSync(subscriptionsFilePath)) {
+    const data = fs.readFileSync(subscriptionsFilePath, 'utf8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Sauvegarder les abonnements dans le fichier JSON
+function saveSubscriptions(subscriptions) {
+  fs.writeFileSync(subscriptionsFilePath, JSON.stringify(subscriptions, null, 2), 'utf8');
+}
+
 // Vérifier si l'utilisateur a un abonnement actif
 function isSubscriptionActive(senderId) {
-  if (!userSubscriptions.has(senderId)) return false;
+  const subscriptions = loadSubscriptions();
+  if (!subscriptions[senderId]) return false;
 
-  const expirationDate = userSubscriptions.get(senderId);
-  const now = new Date();
-  return now <= expirationDate;
+  const expirationDate = new Date(subscriptions[senderId].expiresAt);
+  return new Date() <= expirationDate;
 }
 
 // Ajouter un abonnement pour un utilisateur
 function addSubscription(senderId, days = 30) {
+  const subscriptions = loadSubscriptions();
   const now = new Date();
   const expirationDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-  userSubscriptions.set(senderId, expirationDate);
+
+  subscriptions[senderId] = {
+    subscribedAt: now.toISOString(),
+    expiresAt: expirationDate.toISOString(),
+  };
+
+  saveSubscriptions(subscriptions);
   return expirationDate;
 }
 
@@ -46,12 +69,12 @@ async function handleMessage(event, pageAccessToken) {
       if (validCodes.includes(messageText)) {
         const expirationDate = addSubscription(senderId);
         await sendMessage(senderId, {
-          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\nMerci d'utiliser notre service ! 🚀`
+          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\nMerci d'utiliser notre service ! 🚀`,
         }, pageAccessToken);
       } else {
         // Code invalide
         await sendMessage(senderId, {
-          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 **Lien Facebook** : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 **WhatsApp** : +261 38 58 58 330\n\n💳 Abonnement : **3000 Ar** pour 30 jours.`
+          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 **Lien Facebook** : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 **WhatsApp** : +261 38 58 58 330\n\n💳 Abonnement : **3000 Ar** pour 30 jours.`,
         }, pageAccessToken);
       }
     }
@@ -85,10 +108,10 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
       }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
