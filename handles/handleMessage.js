@@ -74,7 +74,7 @@ async function handleMessage(event, pageAccessToken) {
       } else {
         // Code invalide
         await sendMessage(senderId, {
-          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 **Lien Facebook** : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 **WhatsApp** : +261 38 58 58 330\n\n💳 Abonnement : **3000 Ar** pour 30 jours.`,
+          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 Lien Facebook : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 WhatsApp: +261 38 58 58 330\n\n💳 Abonnement : 3000 Ar pour 30 jours.`,
         }, pageAccessToken);
       }
     }
@@ -90,7 +90,7 @@ async function handleMessage(event, pageAccessToken) {
 
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel taper le bouton menu pour continuer ✔." }, pageAccessToken);
       return;
     }
 
@@ -111,7 +111,7 @@ async function handleMessage(event, pageAccessToken) {
           await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez le bouton 'menu' pour quitter.` }, pageAccessToken);
       }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
@@ -124,7 +124,7 @@ async function handleMessage(event, pageAccessToken) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'help'." }, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez le bouton 'menu'✔." }, pageAccessToken);
     }
   }
 }
