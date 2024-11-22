@@ -69,7 +69,7 @@ async function handleMessage(event, pageAccessToken) {
       if (validCodes.includes(messageText)) {
         const expirationDate = addSubscription(senderId);
         await sendMessage(senderId, {
-          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\nMerci d'utiliser notre service ! 🚀`,
+          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\ntaper le bouton menu maintenant pour continuer et choisir d'ia Merci d'utiliser notre service ! 🚀`,
         }, pageAccessToken);
       } else {
         // Code invalide
