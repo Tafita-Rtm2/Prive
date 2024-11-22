@@ -5,8 +5,9 @@ const { sendMessage } = require('./sendMessage');
 
 // Liste des codes valides
 const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
+const userSubscriptions = new Map(); // Suivi des abonnements des utilisateurs
+const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const commands = new Map(); // Commandes disponibles
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -15,41 +16,20 @@ for (const file of commandFiles) {
   commands.set(command.name, command);
 }
 
-// Chemin vers le fichier de stockage des abonnements
-const subscriptionsFilePath = path.join(__dirname, '../subscriptions.json');
-
-// Charger les abonnements depuis le fichier JSON
-function loadSubscriptions() {
-  if (!fs.existsSync(subscriptionsFilePath)) return {};
-  return JSON.parse(fs.readFileSync(subscriptionsFilePath, 'utf8'));
-}
-
-// Sauvegarder les abonnements dans le fichier JSON
-function saveSubscriptions(subscriptions) {
-  fs.writeFileSync(subscriptionsFilePath, JSON.stringify(subscriptions, null, 2));
-}
-
 // Vérifier si l'utilisateur a un abonnement actif
 function isSubscriptionActive(senderId) {
-  const subscriptions = loadSubscriptions();
-  if (!subscriptions[senderId]) return false;
+  if (!userSubscriptions.has(senderId)) return false;
 
-  const expirationDate = new Date(subscriptions[senderId].expiration);
-  return new Date() <= expirationDate;
+  const expirationDate = userSubscriptions.get(senderId);
+  const now = new Date();
+  return now <= expirationDate;
 }
 
 // Ajouter un abonnement pour un utilisateur
 function addSubscription(senderId, days = 30) {
-  const subscriptions = loadSubscriptions();
   const now = new Date();
   const expirationDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-
-  subscriptions[senderId] = {
-    start: now.toISOString(),
-    expiration: expirationDate.toISOString()
-  };
-
-  saveSubscriptions(subscriptions);
+  userSubscriptions.set(senderId, expirationDate);
   return expirationDate;
 }
 
@@ -105,7 +85,7 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑ '${previousCommand}'. Basculé vers ✔ '${commandName}'.` }, pageAccessToken);
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur ☑'${previousCommand}'. Basculé vers ✔'${commandName}'.` }, pageAccessToken);
         }
       } else {
         await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée✔. Toutes vos questions seront traitées par cette commande🤖. Tapez 'stop' pour quitter🚫.` }, pageAccessToken);
