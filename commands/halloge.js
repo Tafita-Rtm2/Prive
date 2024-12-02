@@ -1,11 +1,11 @@
-const axios = require('axios'); 
+const axios = require('axios');  
 const fs = require('fs');
 const path = require('path');
 
 module.exports = {
   name: 'image-gen',
   description: 'Génère une image via l\'API et l\'envoie à l\'utilisateur.',
-  author: 'Deku',
+  author: 'Personnalisé',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
@@ -19,8 +19,8 @@ module.exports = {
       await sendMessage(senderId, { text: "✨ Génération de votre image en cours... Veuillez patienter quelques instants ⏳" }, pageAccessToken);
 
       // Étape 2 : Appeler l'API pour générer l'image
-      const apiUrl = `https://api.kenliejugarap.com/turbo-image-gen/?width=1024&height=1024&prompt=${encodeURIComponent(prompt)}`;
-      
+      const apiUrl = `https://ccprojectapis.ddns.net/api/imaginev2?prompt=${encodeURIComponent(prompt)}`;
+
       // Appel à l'API pour récupérer l'image
       const response = await axios({
         url: apiUrl,
