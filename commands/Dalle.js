@@ -1,35 +1,40 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'chatgpt4-o',
-  description: 'Pose une question à GPT-4o via l\'API fournie.',
+  name: 'chatgpt4opro',
+  description: 'Récupère les dernières nouvelles à Madagascar via une API externe.',
   author: 'Deku (rest api)',
+  
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez entrer une requête valide." }, pageAccessToken);
     }
 
     try {
-      // Envoyer un message indiquant que GPT-4o est en train de répondre
-      await sendMessage(senderId, { text: '💬 GPT-4o est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      // Indiquer que l'API est en cours de traitement
+      await sendMessage(senderId, { text: '🔄 Recherche des reponse en cours, merci de patienter...\n\n─────★─────' }, pageAccessToken);
 
-      // Construire l'URL de l'API
-      const apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o?ask=${encodeURIComponent(prompt)}&id=${senderId}`;
-      
-      // Faire la requête à l'API
+      // Construire l'URL avec les paramètres
+      const apiUrl = `https://ccprojectapis.ddns.net/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${senderId}&imageUrl=`;
+
+      // Faire une requête GET à l'API
       const response = await axios.get(apiUrl);
 
-      // Extraire uniquement la réponse du champ "response"
-      const text = response.data.response;
+      // Vérifier si la réponse est valide
+      const { data } = response;
+      if (!data || !data.response) {
+        throw new Error('La réponse de l\'API est vide ou invalide.');
+      }
 
-      // Formater la réponse
+      // Extraire les données nécessaires
+      const text = data.response;
       const formattedResponse = `─────★─────\n` +
-                                `✨GPT-4o\n\n${text}\n` +
-                                `─────★─────`;
+        `🤖chatgpt4 o pro :\n\n${text}\n` +
+        `─────★─────`;
 
-      // Envoyer la réponse au destinataire
+      // Envoyer la réponse
       const maxMessageLength = 2000;
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
@@ -39,11 +44,11 @@ module.exports = {
       } else {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
-
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API GPT-4o :', error);
-      // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de l\'appel à l\'API :', error);
+      
+      // Envoyer un message d'erreur
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
