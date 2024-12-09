@@ -1,23 +1,23 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'chatgpt4opro',
-  description: 'Récupère les dernières nouvelles à Madagascar via une API externe.',
-  author: 'Deku (rest api)',
+  name: 'gpt4',
+  description: 'Interact with GPT-4o',
+  author: 'coffee',
   
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez entrer une requête valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "Usage: gpt4 <question>" }, pageAccessToken);
     }
 
     try {
       // Indiquer que l'API est en cours de traitement
-      await sendMessage(senderId, { text: '🔄 Recherche des reponse en cours, merci de patienter...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(senderId, { text: '🔄 Génération de la réponse en cours, merci de patienter...' }, pageAccessToken);
 
-      // Construire l'URL avec les paramètres
-      const apiUrl = `https://ccprojectapis.ddns.net/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${senderId}&imageUrl=`;
+      // Construire l'URL de l'API
+      const apiUrl = `https://api.kenliejugarap.com/blackbox-gpt4o/?text=${encodeURIComponent(prompt)}`;
 
       // Faire une requête GET à l'API
       const response = await axios.get(apiUrl);
@@ -28,22 +28,12 @@ module.exports = {
         throw new Error('La réponse de l\'API est vide ou invalide.');
       }
 
-      // Extraire les données nécessaires
+      // Extraire et formater la réponse
       const text = data.response;
-      const formattedResponse = `─────★─────\n` +
-        `🤖chatgpt4 o pro :\n\n${text}\n` +
-        `─────★─────`;
+      const formattedResponse = `🤖 GPT-4o:\n\n${text}`;
 
       // Envoyer la réponse
-      const maxMessageLength = 2000;
-      if (formattedResponse.length > maxMessageLength) {
-        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
-        for (const message of messages) {
-          await sendMessage(senderId, { text: message }, pageAccessToken);
-        }
-      } else {
-        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-      }
+      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
     } catch (error) {
       console.error('Erreur lors de l\'appel à l\'API :', error);
       
@@ -52,12 +42,3 @@ module.exports = {
     }
   }
 };
-
-// Fonction pour découper les messages longs
-function splitMessageIntoChunks(message, chunkSize) {
-  const chunks = [];
-  for (let i = 0; i < message.length; i += chunkSize) {
-    chunks.push(message.slice(i, i + chunkSize));
-  }
-  return chunks;
-}
