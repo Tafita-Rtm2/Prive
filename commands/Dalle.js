@@ -1,9 +1,9 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gpt4o-pro',
-  description: 'Pose une question ou analyse une image via l’API GPT4o Pro.',
-  author: 'Deku',
+  name: 'kaiz-ai',
+  description: 'Pose une question ou analyse une image via l’API Kaiz.',
+  author: 'Kaiz Integration',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
@@ -15,22 +15,23 @@ module.exports = {
       let apiUrl;
 
       if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        // Analyse d'image avec GPT4o Pro
-        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?imageUrl=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-        await sendMessage(senderId, { text: '📷 GPT4o Pro est en train d\'analyser votre image ⏳...\n\n─────★─────' }, pageAccessToken);
+        // Analyse d'image
+        const imageUrl = prompt;
+        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
+        await sendMessage(senderId, { text: '📷 Analyse de votre image en cours⏳...\n\n─────★─────' }, pageAccessToken);
       } else {
-        // Question texte avec GPT4o Pro
-        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-        await sendMessage(senderId, { text: '💬 GPT4o Pro est en train de répondre ⏳...\n\n─────★─────' }, pageAccessToken);
+        // Question texte
+        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+        await sendMessage(senderId, { text: '💬 Kaiz AI est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
       }
 
-      // Appel à l'API GPT4o Pro
+      // Appel à l'API Kaiz
       const response = await axios.get(apiUrl);
 
-      // Vérifiez la réponse de l'API
-      const text = response.data.answer || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      // Vérifier et récupérer la réponse
+      const text = response.data?.response || "Désolé, je n'ai pas pu obtenir une réponse valide.";
       const formattedResponse = `─────★─────\n` +
-                                `✨GPT4o Pro\n\n${text}\n` +
+                                `✨Kaiz AI\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues
@@ -44,8 +45,9 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API GPT4o Pro :', error);
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue avec GPT4o Pro. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error('Erreur lors de l\'appel à l\'API Kaiz :', error);
+      // Envoyer un message d'erreur en cas de problème
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
