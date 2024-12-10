@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'Gpt4o-pro',
+  name: 'gpt4o-pro',
   description: 'Analyse une image ou répond à une question via l’API Kaiz.',
   author: 'Kaiz Integration',
   async execute(senderId, message, pageAccessToken, sendMessage) {
