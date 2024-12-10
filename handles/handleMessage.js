@@ -1,26 +1,40 @@
+const fs = require('fs');
+const path = require('path');
 const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
 // Liste des codes valides
 const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
 const commands = new Map();
-const userStates = new Map(); // Suivi des états des utilisateurs
-const userContexts = new Map(); // Suivi du contexte des utilisateurs pour "continuer"
-
-// Objet en mémoire pour stocker les abonnements
-const subscriptions = {};
+const userStates = new Map(); // Suivi des Ã©tats des utilisateurs
 
 // Charger les commandes
-const fs = require('fs');
-const path = require('path');
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
   const command = require(`../commands/${file}`);
   commands.set(command.name, command);
 }
 
-// Vérifier si l'utilisateur a un abonnement actif
+// Chemin vers le fichier JSON pour sauvegarder les abonnements
+const subscriptionsFilePath = path.join(__dirname, '../subscriptions.json');
+
+// Charger les abonnements depuis le fichier JSON
+function loadSubscriptions() {
+  if (fs.existsSync(subscriptionsFilePath)) {
+    const data = fs.readFileSync(subscriptionsFilePath, 'utf8');
+    return JSON.parse(data);
+  }
+  return {};
+}
+
+// Sauvegarder les abonnements dans le fichier JSON
+function saveSubscriptions(subscriptions) {
+  fs.writeFileSync(subscriptionsFilePath, JSON.stringify(subscriptions, null, 2), 'utf8');
+}
+
+// VÃ©rifier si l'utilisateur a un abonnement actif
 function isSubscriptionActive(senderId) {
+  const subscriptions = loadSubscriptions();
   if (!subscriptions[senderId]) return false;
 
   const expirationDate = new Date(subscriptions[senderId].expiresAt);
@@ -29,6 +43,7 @@ function isSubscriptionActive(senderId) {
 
 // Ajouter un abonnement pour un utilisateur
 function addSubscription(senderId, days = 30) {
+  const subscriptions = loadSubscriptions();
   const now = new Date();
   const expirationDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
@@ -37,70 +52,45 @@ function addSubscription(senderId, days = 30) {
     expiresAt: expirationDate.toISOString(),
   };
 
+  saveSubscriptions(subscriptions);
   return expirationDate;
 }
 
-// Fonction principale pour gérer les messages entrants
+// Fonction principale pour gÃ©rer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
   if (!isSubscriptionActive(senderId)) {
+    // Si l'utilisateur n'a pas d'abonnement actif
     if (event.message.text) {
       const messageText = event.message.text.trim();
 
-      // Vérification des codes d'abonnement
+      // VÃ©rification des codes d'abonnement
       if (validCodes.includes(messageText)) {
         const expirationDate = addSubscription(senderId);
         await sendMessage(senderId, {
-          text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\ntaper le bouton menu maintenant pour continuer et choisir d'ia Merci d'utiliser notre service ! 🚀`,
+          text: `âœ… Votre abonnement a Ã©tÃ© activÃ© avec succÃ¨s ! ðŸŽ‰\nðŸ“… Date d'activation : ${new Date().toLocaleString()}\nðŸ“… Expiration : ${expirationDate.toLocaleString()}.\n\ntaper le bouton menu maintenant pour continuer et choisir d'ia Merci d'utiliser notre service ! ðŸš€`,
         }, pageAccessToken);
       } else {
+        // Code invalide
         await sendMessage(senderId, {
-          text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🙏\n\n👉 Lien Facebook : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 WhatsApp: +261 38 58 58 330\n\n💳 Abonnement : 3000 Ar pour 30 jours.`,
+          text: `âŒ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. ðŸ›‘\n\nðŸ‘‰ Lien Facebook : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\nðŸ“ž WhatsApp: +261 38 58 58 330\n\nðŸ’³ Abonnement : 3000 Ar pour 30 jours.`,
         }, pageAccessToken);
       }
     }
     return;
   }
 
-  // Gestion des messages avec image
+  // Si l'abonnement est actif, continuer le flux existant
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
-
-    // Vérifier si l'utilisateur est verrouillé sur une commande
-    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-      const lockedCommand = userStates.get(senderId).lockedCommand;
-      const lockedCommandInstance = commands.get(lockedCommand);
-
-      if (lockedCommandInstance && lockedCommandInstance.execute) {
-        return await lockedCommandInstance.execute(senderId, [imageUrl], pageAccessToken, sendMessage);
-      } else {
-        await sendMessage(senderId, { text: "⚠️ La commande verrouillée n'est pas valide ou ne supporte pas les images." }, pageAccessToken);
-      }
-    } else {
-      // Logique par défaut pour les images
-      await askForImagePrompt(senderId, imageUrl, pageAccessToken);
-    }
-    return;
-  }
-
-  // Gestion des messages texte
-  if (event.message.text) {
+    await askForImagePrompt(senderId, imageUrl, pageAccessToken);
+  } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel taper le bouton menu pour continuer ✔." }, pageAccessToken);
-      return;
-    }
-
-    if (messageText.toLowerCase() === 'continuer') {
-      if (userContexts.has(senderId) && userContexts.get(senderId).lastResponse) {
-        const continuationPrompt = `${userContexts.get(senderId).lastResponse} Continue...`;
-        await processPrompt(senderId, continuationPrompt, pageAccessToken);
-      } else {
-        await sendMessage(senderId, { text: "Je ne sais pas quoi continuer. Posez une nouvelle question." }, pageAccessToken);
-      }
+      await sendMessage(senderId, { text: "ðŸ”“ Vous avez quittÃ© le mode actuel taper le bouton menu pour continuer âœ”." }, pageAccessToken);
       return;
     }
 
@@ -115,6 +105,14 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
+      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+        const previousCommand = userStates.get(senderId).lockedCommand;
+        if (previousCommand !== commandName) {
+          await sendMessage(senderId, { text: `ðŸ”“ Vous n'Ãªtes plus verrouillÃ© sur '${previousCommand}'. BasculÃ© vers '${commandName}'.` }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: `ðŸ”’ La commande '${commandName}' est maintenant verrouillÃ©e. Tapez le bouton 'menu' pour quitter.` }, pageAccessToken);
+      }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
@@ -122,16 +120,52 @@ async function handleMessage(event, pageAccessToken) {
     if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
       const lockedCommand = userStates.get(senderId).lockedCommand;
       const lockedCommandInstance = commands.get(lockedCommand);
-
       if (lockedCommandInstance) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await processPrompt(senderId, messageText, pageAccessToken);
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez le bouton 'menu'âœ”." }, pageAccessToken);
     }
   }
 }
 
-// Autres fonctions auxiliaires restent inchangées...
+// Demander le prompt de l'utilisateur pour analyser l'image
+async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
+  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  await sendMessage(senderId, { text: "ðŸ“· Image reÃ§ue. Que voulez-vous que je fasse avec cette image ? âœ¨ Posez toutes vos questions Ã  propos de cette photo ! ðŸ“¸ðŸ˜Š." }, pageAccessToken);
+}
+
+// Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
+async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
+  try {
+    await sendMessage(senderId, { text: "ðŸ” Je traite votre requÃªte concernant l'image. Patientez un instant... ðŸ¤” â³" }, pageAccessToken);
+
+    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
+
+    if (imageAnalysis) {
+      await sendMessage(senderId, { text: `ðŸ“„ Voici la rÃ©ponse Ã  votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
+    } else {
+      await sendMessage(senderId, { text: "âŒ Aucune information exploitable n'a Ã©tÃ© dÃ©tectÃ©e dans cette image." }, pageAccessToken);
+    }
+
+    userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse de l\'image :', error);
+    await sendMessage(senderId, { text: "âš ï¸ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
+  }
+}
+
+// Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
+async function analyzeImageWithGemini(imageUrl, prompt) {
+  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
+
+  try {
+    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    return response.data && response.data.answer ? response.data.answer : '';
+  } catch (error) {
+    console.error('Erreur avec Gemini :', error);
+    throw new Error('Erreur lors de l\'analyse avec Gemini');
+  }
+}
 
 module.exports = { handleMessage };
