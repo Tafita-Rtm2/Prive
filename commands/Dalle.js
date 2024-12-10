@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'kaiz-ai',
+  name: 'gpt4o-pro',
   description: 'Pose une question ou analyse une image via l’API Kaiz.',
   author: 'Kaiz Integration',
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -22,7 +22,7 @@ module.exports = {
       } else {
         // Question texte
         apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-        await sendMessage(senderId, { text: '💬 Kaiz AI est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
+        await sendMessage(senderId, { text: '💬 gpt4o pro est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
       }
 
       // Appel à l'API Kaiz
@@ -31,7 +31,7 @@ module.exports = {
       // Vérifier et récupérer la réponse
       const text = response.data?.response || "Désolé, je n'ai pas pu obtenir une réponse valide.";
       const formattedResponse = `─────★─────\n` +
-                                `✨Kaiz AI\n\n${text}\n` +
+                                `✨Gpt4o pro\n\n${text}\n` +
                                 `─────★─────`;
 
       // Gérer les réponses longues
