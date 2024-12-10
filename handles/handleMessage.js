@@ -7,6 +7,7 @@ const { sendMessage } = require('./sendMessage');
 const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
+const conversationTimeout = 20 * 60 * 1000; // 20 minutes
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -56,23 +57,39 @@ function addSubscription(senderId, days = 30) {
   return expirationDate;
 }
 
-// Fonction principale pour gérer les messages entrants
+// Gestion des conversations contextuelles
+function updateUserState(senderId, key, value) {
+  const state = userStates.get(senderId) || {};
+  state[key] = value;
+  state.lastActive = Date.now(); // Mettre à jour l'activité
+  userStates.set(senderId, state);
+}
+
+function getUserState(senderId) {
+  const state = userStates.get(senderId);
+  if (!state) return null;
+
+  // Vérifier si la conversation a expiré
+  if (Date.now() - state.lastActive > conversationTimeout) {
+    userStates.delete(senderId);
+    return null;
+  }
+  return state;
+}
+
+// Gestion des messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
   if (!isSubscriptionActive(senderId)) {
-    // Si l'utilisateur n'a pas d'abonnement actif
     if (event.message.text) {
       const messageText = event.message.text.trim();
-
-      // Vérification des codes d'abonnement
       if (validCodes.includes(messageText)) {
         const expirationDate = addSubscription(senderId);
         await sendMessage(senderId, {
           text: `✅ Votre abonnement a été activé avec succès ! 🎉\n📅 Date d'activation : ${new Date().toLocaleString()}\n📅 Expiration : ${expirationDate.toLocaleString()}.\n\ntaper le bouton menu maintenant pour continuer et choisir d'ia Merci d'utiliser notre service ! 🚀`,
         }, pageAccessToken);
       } else {
-        // Code invalide
         await sendMessage(senderId, {
           text: `❌ Le code fourni est invalide. Veuillez acheter un abonnement pour activer ce service. 🛑\n\n👉 Lien Facebook : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n📞 WhatsApp: +261 38 58 58 330\n\n💳 Abonnement : 3000 Ar pour 30 jours.`,
         }, pageAccessToken);
@@ -81,22 +98,27 @@ async function handleMessage(event, pageAccessToken) {
     return;
   }
 
-  // Si l'abonnement est actif, continuer le flux existant
+  const userState = getUserState(senderId);
+
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
-    await askForImagePrompt(senderId, imageUrl, pageAccessToken);
+
+    if (userState && userState.lockedCommand) {
+      await askForImagePrompt(senderId, imageUrl, pageAccessToken, userState.lockedCommand);
+    } else {
+      await askForImagePrompt(senderId, imageUrl, pageAccessToken);
+    }
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel taper le bouton menu pour continuer ✔." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton menu pour continuer ✔." }, pageAccessToken);
       return;
     }
 
-    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
-      const { imageUrl } = userStates.get(senderId);
-      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
+    if (userState && userState.awaitingImagePrompt) {
+      await analyzeImageWithPrompt(senderId, userState.imageUrl, messageText, pageAccessToken, userState.lockedCommand);
       return;
     }
 
@@ -105,20 +127,13 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
-      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-        const previousCommand = userStates.get(senderId).lockedCommand;
-        if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
-        }
-      } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez le bouton 'menu' pour quitter.` }, pageAccessToken);
-      }
-      userStates.set(senderId, { lockedCommand: commandName });
+      updateUserState(senderId, 'lockedCommand', commandName);
+      await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-      const lockedCommand = userStates.get(senderId).lockedCommand;
+    if (userState && userState.lockedCommand) {
+      const lockedCommand = userState.lockedCommand;
       const lockedCommandInstance = commands.get(lockedCommand);
       if (lockedCommandInstance) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
@@ -129,42 +144,32 @@ async function handleMessage(event, pageAccessToken) {
   }
 }
 
-// Demander le prompt de l'utilisateur pour analyser l'image
-async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
-  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo ! 📸😊." }, pageAccessToken);
+async function askForImagePrompt(senderId, imageUrl, pageAccessToken, lockedCommand = null) {
+  updateUserState(senderId, 'awaitingImagePrompt', true);
+  updateUserState(senderId, 'imageUrl', imageUrl);
+  await sendMessage(senderId, {
+    text: lockedCommand
+      ? `📷 Vous êtes verrouillé sur '${lockedCommand}'. Que voulez-vous faire avec cette image ? ✨`
+      : "📷 Image reçue. Que voulez-vous faire avec cette image ? ✨",
+  }, pageAccessToken);
 }
 
-// Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
-async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
-  try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔 ⏳" }, pageAccessToken);
-
-    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
-
-    if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
-    } else {
-      await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
-    }
-
-    userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  } catch (error) {
-    console.error('Erreur lors de l\'analyse de l\'image :', error);
-    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
-  }
-}
-
-// Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
-async function analyzeImageWithGemini(imageUrl, prompt) {
-  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
+async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken, lockedCommand = null) {
+  const apiUrl = lockedCommand === 'gpt4'
+    ? `https://ccprojectapis.ddns.net/api/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${senderId}&imageUrl=${encodeURIComponent(imageUrl)}`
+    : `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}&imageUrl=${encodeURIComponent(imageUrl)}`;
 
   try {
-    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
-    return response.data && response.data.answer ? response.data.answer : '';
+    await sendMessage(senderId, { text: "🔍 Analyse en cours. Patientez un instant... 🤔 ⏳" }, pageAccessToken);
+    const response = await axios.get(apiUrl);
+    const answer = response.data && response.data.response
+      ? response.data.response
+      : '❌ Aucune réponse obtenue.';
+    await sendMessage(senderId, { text: answer }, pageAccessToken);
+    updateUserState(senderId, 'awaitingImagePrompt', false);
   } catch (error) {
-    console.error('Erreur avec Gemini :', error);
-    throw new Error('Erreur lors de l\'analyse avec Gemini');
+    console.error('Erreur analyse image :', error);
+    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse." }, pageAccessToken);
   }
 }
 
