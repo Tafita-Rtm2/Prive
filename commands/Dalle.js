@@ -3,34 +3,32 @@ const axios = require('axios');
 module.exports = {
   name: 'gpt4o-pro',
   description: 'Pose une question ou analyse une image via l’API GPT4o Pro.',
-  author: 'Deku (image & texte)',
+  author: 'Deku',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    if (!prompt && !args.imageUrl) {
+    if (!prompt) {
       return sendMessage(senderId, { text: "Veuillez fournir une question ou une URL d'image valide." }, pageAccessToken);
     }
 
     try {
-      // Vérification si l'utilisateur envoie une URL d'image ou une simple question
       let apiUrl;
 
       if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        // Analyse d'image
-        const imageUrl = prompt;
-        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?imageUrl=${encodeURIComponent(imageUrl)}&uid=${senderId}`;
-        await sendMessage(senderId, { text: '📷 Analyse de votre image en cours⏳...\n\n─────★─────' }, pageAccessToken);
+        // Analyse d'image avec GPT4o Pro
+        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?imageUrl=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+        await sendMessage(senderId, { text: '📷 GPT4o Pro est en train d\'analyser votre image ⏳...\n\n─────★─────' }, pageAccessToken);
       } else {
-        // Question texte
-        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${senderId}`;
-        await sendMessage(senderId, { text: '💬 GPT4o Pro est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
+        // Question texte avec GPT4o Pro
+        apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+        await sendMessage(senderId, { text: '💬 GPT4o Pro est en train de répondre ⏳...\n\n─────★─────' }, pageAccessToken);
       }
 
       // Appel à l'API GPT4o Pro
       const response = await axios.get(apiUrl);
 
-      // Récupérer et formater la réponse
-      const text = response.data.response || "Désolé, je n'ai pas pu obtenir une réponse.";
+      // Vérifiez la réponse de l'API
+      const text = response.data.answer || "Désolé, je n'ai pas pu obtenir une réponse valide.";
       const formattedResponse = `─────★─────\n` +
                                 `✨GPT4o Pro\n\n${text}\n` +
                                 `─────★─────`;
@@ -47,8 +45,7 @@ module.exports = {
       }
     } catch (error) {
       console.error('Erreur lors de l\'appel à l\'API GPT4o Pro :', error);
-      // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue avec GPT4o Pro. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
