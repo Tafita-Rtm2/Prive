@@ -5,6 +5,7 @@ const { sendMessage } = require('./sendMessage');
 const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
+const userContexts = new Map(); // Suivi du contexte des utilisateurs pour "continuer"
 
 // Objet en mémoire pour stocker les abonnements
 const subscriptions = {};
@@ -77,6 +78,17 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
+    if (messageText.toLowerCase() === 'continuer') {
+      // Gérer la commande "continuer"
+      if (userContexts.has(senderId) && userContexts.get(senderId).lastResponse) {
+        const continuationPrompt = `${userContexts.get(senderId).lastResponse} Continue...`;
+        await processPrompt(senderId, continuationPrompt, pageAccessToken);
+      } else {
+        await sendMessage(senderId, { text: "Je ne sais pas quoi continuer. Posez une nouvelle question." }, pageAccessToken);
+      }
+      return;
+    }
+
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
       const { imageUrl } = userStates.get(senderId);
       await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
@@ -107,8 +119,28 @@ async function handleMessage(event, pageAccessToken) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez le bouton 'menu'✔." }, pageAccessToken);
+      // Enregistrer le contexte avant d'envoyer une réponse
+      await processPrompt(senderId, messageText, pageAccessToken);
     }
+  }
+}
+
+// Gérer un prompt et sauvegarder la réponse dans le contexte utilisateur
+async function processPrompt(senderId, prompt, pageAccessToken) {
+  try {
+    const apiUrl = `https://ccprojectapis.ddns.net/api/gpt4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+    await sendMessage(senderId, { text: "⏳ GPT4o Pro est en train de répondre..." }, pageAccessToken);
+
+    const response = await axios.get(apiUrl);
+    const text = response.data.answer || "Désolé, je n'ai pas pu obtenir une réponse.";
+
+    // Enregistrer la dernière réponse dans le contexte utilisateur
+    userContexts.set(senderId, { lastResponse: text });
+
+    await sendMessage(senderId, { text: text }, pageAccessToken);
+  } catch (error) {
+    console.error("Erreur lors de l'appel à l'API GPT4o Pro :", error);
+    await sendMessage(senderId, { text: "Une erreur est survenue. Veuillez réessayer plus tard." }, pageAccessToken);
   }
 }
 
