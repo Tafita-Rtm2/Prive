@@ -5,6 +5,7 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
+const userConversations = new Map(); // Historique des conversations des utilisateurs
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -16,6 +17,12 @@ for (const file of commandFiles) {
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
+
+  // Ajouter le message reçu à l'historique de l'utilisateur
+  if (!userConversations.has(senderId)) {
+    userConversations.set(senderId, []);
+  }
+  userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
@@ -30,8 +37,18 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Si l'utilisateur attend une analyse d'image
+    // Si l'utilisateur attend une analyse d'image et entre une commande
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const args = messageText.split(' ');
+      const commandName = args[0].toLowerCase();
+      const command = commands.get(commandName);
+
+      if (command) {
+        userStates.delete(senderId); // Quitter le mode image
+        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
+        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+      }
+
       const { imageUrl } = userStates.get(senderId);
       await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
