@@ -1,116 +1,56 @@
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
 module.exports = {
-  name: 'gemini',
-  description: 'Chat avec Gemini ou génère une image',
-  author: 'vex_kshitiz',
-
-  async execute(senderId, args, pageAccessToken, sendMessage, event = null) {
-    const prompt = args.join(' ').trim();
-
-    // Vérifie si une image est envoyée directement dans le message
-    if (event?.attachments?.length > 0) {
-      try {
-        // Si une image est envoyée, la décrire automatiquement
-        const photoUrl = event.attachments[0].url;
-        const description = await describeImage(prompt || "Décris cette image", photoUrl);
-        const formattedResponse = `👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nDescription: ${description}\n━━━━━━━━━━━━━━━━`;
-        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-      } catch (error) {
-        console.error('Erreur lors de la description de l’image:', error);
-        await sendMessage(senderId, { text: 'Désolé, une erreur est survenue lors de la description de l’image.' }, pageAccessToken);
-      }
-      return;
-    }
+  name: 'gemini-ai',
+  description: 'Pose une question à Gemini AI via l’API fournie.',
+  author: 'Votre nom',
+  async execute(senderId, args, pageAccessToken, sendMessage) {
+    const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nVeuillez fournir un prompt ou envoyer une image.\n━━━━━━━━━━━━━━━━" }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      if (args[0]?.toLowerCase() === "draw") {
-        // Générer une image
-        await sendMessage(senderId, { text: '💬 *Gemini est en train de générer une image* ⏳...\n\n─────★─────' }, pageAccessToken);
+      // Envoyer un message indiquant que Gemini AI est en train de répondre
+      await sendMessage(senderId, { text: '💬 Gemini AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-        const imageUrl = await generateImage(prompt);
+      // Construire l'URL de l'API Gemini AI
+      const apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}`;
+      const response = await axios.get(apiUrl);
 
-        // Téléchargement de l'image générée
-        const imagePath = path.join(__dirname, 'cache', `image_${Date.now()}.png`);
-        const writer = fs.createWriteStream(imagePath);
-        const { data } = await axios({ url: imageUrl, method: 'GET', responseType: 'stream' });
-        data.pipe(writer);
+      // Utiliser le bon champ de réponse
+      const text = response.data.answer || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
 
-        await new Promise((resolve, reject) => {
-          writer.on('finish', resolve);
-          writer.on('error', reject);
-        });
+      // Formater la réponse
+      const formattedResponse = `─────★─────\n` +
+                                `✨Gemini AI\n\n${text}\n` +
+                                `─────★─────`;
 
-        // Envoyer l'image générée
-        await sendMessage(senderId, {
-          text: '👩‍💻 | 𝙶𝚎𝚖𝚒𝚗𝚒 |\n━━━━━━━━━━━━━━━━\nImage générée :',
-          attachment: fs.createReadStream(imagePath)
-        }, pageAccessToken);
-      } else {
-        // Obtenir une réponse textuelle
-        await sendMessage(senderId, { text: '💬 *Gemini est en train de te répondre* ⏳...\n\n─────★─────' }, pageAccessToken);
-        const response = await getTextResponse(prompt);
-        const formattedResponse = `─────★─────\n✨ Gemini 🤖\n\n${response}\n─────★─────`;
-
-        // Gérer les réponses longues
-        const maxMessageLength = 2000;
-        if (formattedResponse.length > maxMessageLength) {
-          const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
-          for (const message of messages) {
-            await sendMessage(senderId, { text: message }, pageAccessToken);
-          }
-        } else {
-          await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      // Gérer les réponses longues
+      const maxMessageLength = 2000;
+      if (formattedResponse.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+        for (const message of messages) {
+          await sendMessage(senderId, { text: message }, pageAccessToken);
         }
+      } else {
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
+
     } catch (error) {
-      console.error('Erreur lors de l’appel API Gemini:', error);
+      console.error('Erreur lors de l\'appel à l\'API Gemini AI :', error);
+      // Envoyer un message d'erreur en cas de problème
       await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour obtenir une description d'image via l'API Gemini
-async function describeImage(prompt, photoUrl) {
-  try {
-    const { data } = await axios.get(`http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}&imageUrl=${encodeURIComponent(photoUrl)}`);
-    return data.response || "Aucune description disponible.";
-  } catch (error) {
-    throw new Error('Erreur lors de la description de l’image.');
-  }
-}
-
-// Fonction pour obtenir une réponse textuelle via l'API Gemini
-async function getTextResponse(prompt) {
-  try {
-    const { data } = await axios.get(`http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}`);
-    return data.response || "Aucune réponse disponible.";
-  } catch (error) {
-    throw new Error('Erreur lors de l’appel API Gemini pour la réponse textuelle.');
-  }
-}
-
-// Fonction pour découper les messages trop longs
+// Fonction pour découper les messages longs
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
     chunks.push(message.slice(i, i + chunkSize));
   }
   return chunks;
-}
-
-// Fonction pour générer une image via l'API Gemini
-async function generateImage(prompt) {
-  try {
-    const { data } = await axios.get(`http://sgp1.hmvhostings.com:25721/gemini?question=draw:${encodeURIComponent(prompt)}`);
-    return data.imageUrl || "Image non générée.";
-  } catch (error) {
-    throw new Error('Erreur lors de la génération de l’image.');
-  }
 }
