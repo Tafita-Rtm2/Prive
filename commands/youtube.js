@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 module.exports = {
-  name: 'gemini',
+  name: 'gemini1',
   description: 'Chat avec Gemini ou génère une image',
   author: 'vex_kshitiz',
 
