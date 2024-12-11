@@ -2,34 +2,27 @@ const axios = require('axios');
 
 module.exports = {
   name: 'gemini-ai',
-  description: 'Pose une question ou analyse une image via l’API Gemini.',
-  author: 'Deku (texte & image)',
+  description: 'Pose une question à Gemini AI via l’API fournie.',
+  author: 'Votre nom',
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez fournir une question ou une URL d'image valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
     }
 
     try {
-      let apiUrl;
+      // Envoyer un message indiquant que Gemini AI est en train de répondre
+      await sendMessage(senderId, { text: '💬 Gemini AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        // Analyse d'image
-        const imageUrl = prompt;
-        apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?imageUrl=${encodeURIComponent(imageUrl)}`;
-        await sendMessage(senderId, { text: '📷 Analyse de votre image en cours⏳...\n\n─────★─────' }, pageAccessToken);
-      } else {
-        // Question texte
-        apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}`;
-        await sendMessage(senderId, { text: '💬 Gemini AI est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
-      }
-
-      // Appel à l'API Gemini
+      // Construire l'URL de l'API Gemini AI
+      const apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      // Vérifier et récupérer la réponse
-      const text = response.data[0]?.answer || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      // Vérifier si la réponse contient le texte attendu
+      const text = response.data.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+
+      // Formater la réponse
       const formattedResponse = `─────★─────\n` +
                                 `✨Gemini AI\n\n${text}\n` +
                                 `─────★─────`;
@@ -44,10 +37,11 @@ module.exports = {
       } else {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
+
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Gemini :', error);
+      console.error('Erreur lors de l\'appel à l\'API Gemini AI :', error);
       // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
