@@ -19,8 +19,8 @@ module.exports = {
       const apiUrl = `http://sgp1.hmvhostings.com:25721/gemini?question=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      // Vérifier si la réponse contient le texte attendu
-      const text = response.data.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+      // Utiliser le bon champ de réponse
+      const text = response.data.answer || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
 
       // Formater la réponse
       const formattedResponse = `─────★─────\n` +
