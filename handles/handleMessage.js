@@ -18,83 +18,71 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Initialiser l'historique pour cet utilisateur
+  // Ajouter le message reçu à l'historique de l'utilisateur
   if (!userConversations.has(senderId)) {
     userConversations.set(senderId, []);
   }
+  userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
-  const userConversation = userConversations.get(senderId);
-
-  // Ajouter le message utilisateur à l'historique
-  const userMessage = event.message.text || 'Image';
-  userConversation.push({ type: 'user', text: userMessage });
-
-  // Gestion des messages avec des images
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
-    return;
-  }
+  } else if (event.message.text) {
+    const messageText = event.message.text.trim();
 
-  // Traitement des commandes ou texte
-  if (event.message.text) {
-    const messageText = event.message.text.trim().toLowerCase();
-
-    // Commande "stop"
-    if (messageText === 'stop') {
+    // Commande "stop" pour quitter le mode actuel
+    if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
       await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
       return;
     }
 
-    // Vérifier si l'utilisateur demande un suivi
-    if (isFollowUp(messageText, userConversation)) {
-      const lastBotResponse = getLastBotResponse(userConversation);
-      if (lastBotResponse) {
-        const detailedResponse = await provideDetailedResponse(lastBotResponse, messageText);
-        userConversation.push({ type: 'bot', text: detailedResponse });
-        await sendMessage(senderId, { text: detailedResponse }, pageAccessToken);
-        return;
+    // Si l'utilisateur attend une analyse d'image et entre une commande
+    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const args = messageText.split(' ');
+      const commandName = args[0].toLowerCase();
+      const command = commands.get(commandName);
+
+      if (command) {
+        userStates.delete(senderId); // Quitter le mode image
+        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
+        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
       }
-    }
 
-    // Traitement des commandes classiques
-    const args = messageText.split(' ');
-    const commandName = args[0];
-    const command = commands.get(commandName);
-
-    if (command) {
-      userStates.set(senderId, { lockedCommand: commandName });
-      const response = await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
-      userConversation.push({ type: 'bot', text: response });
+      const { imageUrl } = userStates.get(senderId);
+      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
     }
 
-    // Si aucune commande ne correspond
-    await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'stop' pour quitter." }, pageAccessToken);
-  }
-}
+    // Traitement des commandes
+    const args = messageText.split(' ');
+    const commandName = args[0].toLowerCase();
+    const command = commands.get(commandName);
 
-// Détecter si l'utilisateur demande un suivi
-function isFollowUp(messageText, conversationHistory) {
-  const followUpKeywords = ['explique', 'développe', 'plus de détails', 'comment', 'pourquoi', 'quoi', 'ça veut dire quoi'];
-  return followUpKeywords.some(keyword => messageText.includes(keyword)) || conversationHistory.length > 0;
-}
+    if (command) {
+      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+        const previousCommand = userStates.get(senderId).lockedCommand;
+        if (previousCommand !== commandName) {
+          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
+      }
+      userStates.set(senderId, { lockedCommand: commandName });
+      return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+    }
 
-// Récupérer la dernière réponse du bot dans l'historique
-function getLastBotResponse(conversationHistory) {
-  for (let i = conversationHistory.length - 1; i >= 0; i--) {
-    if (conversationHistory[i].type === 'bot') {
-      return conversationHistory[i].text;
+    // Si une commande est verrouillée, utiliser la commande verrouillée pour traiter la demande
+    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+      const lockedCommand = userStates.get(senderId).lockedCommand;
+      const lockedCommandInstance = commands.get(lockedCommand);
+      if (lockedCommandInstance) {
+        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
+      }
+    } else {
+      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'stop' pour quitter." }, pageAccessToken);
     }
   }
-  return null;
-}
-
-// Générer une réponse détaillée à partir d'une réponse précédente
-async function provideDetailedResponse(lastBotResponse, userPrompt) {
-  // Appeler une API ou générer une réponse basée sur le texte précédent
-  return `Voici une explication détaillée basée sur votre dernière question :\n"${lastBotResponse}".`;
 }
 
 // Demander le prompt de l'utilisateur pour analyser l'image
