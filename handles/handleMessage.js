@@ -18,94 +18,83 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
-  // Ajouter le message reçu à l'historique de l'utilisateur
+  // Initialiser l'historique pour cet utilisateur
   if (!userConversations.has(senderId)) {
     userConversations.set(senderId, []);
   }
-  userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
+  const userConversation = userConversations.get(senderId);
+
+  // Ajouter le message utilisateur à l'historique
+  const userMessage = event.message.text || 'Image';
+  userConversation.push({ type: 'user', text: userMessage });
+
+  // Gestion des messages avec des images
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
-  } else if (event.message.text) {
-    const messageText = event.message.text.trim();
+    return;
+  }
 
-    // Ajouter la commande pour afficher les questions posées
-    if (messageText.toLowerCase() === 'quelles sont mes questions ?') {
-      const questions = userConversations
-        .get(senderId)
-        .filter(entry => entry.type === 'user') // Filtrer uniquement les messages utilisateur
-        .map(entry => entry.text)
-        .join('\n- ');
+  // Traitement des commandes ou texte
+  if (event.message.text) {
+    const messageText = event.message.text.trim().toLowerCase();
 
-      const response = questions
-        ? `📜 Voici vos questions précédentes :\n- ${questions}`
-        : "📜 Vous n'avez posé aucune question pour l'instant.";
-
-      await sendMessage(senderId, { text: response }, pageAccessToken);
+    // Commande "stop"
+    if (messageText === 'stop') {
+      userStates.delete(senderId);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
       return;
     }
 
-    // Si l'utilisateur pose une question après une réponse
-    if (isFollowUp(senderId)) {
-      const lastBotResponse = userConversations
-        .get(senderId)
-        .filter(entry => entry.type === 'bot') // Filtrer les réponses du bot
-        .slice(-1)[0]; // Récupérer la dernière réponse
-
+    // Vérifier si l'utilisateur demande un suivi
+    if (isFollowUp(messageText, userConversation)) {
+      const lastBotResponse = getLastBotResponse(userConversation);
       if (lastBotResponse) {
-        await sendMessage(
-          senderId,
-          { text: `🔍 Vous avez dit : "${messageText}". Voici une réponse basée sur ma dernière réponse : ${lastBotResponse.text}` },
-          pageAccessToken
-        );
-      } else {
-        await sendMessage(senderId, { text: "Je n'ai pas de réponse récente à développer. Posez-moi une question d'abord ! 😊" }, pageAccessToken);
+        const detailedResponse = await provideDetailedResponse(lastBotResponse, messageText);
+        userConversation.push({ type: 'bot', text: detailedResponse });
+        await sendMessage(senderId, { text: detailedResponse }, pageAccessToken);
+        return;
       }
-      return;
     }
 
+    // Traitement des commandes classiques
     const args = messageText.split(' ');
-    const commandName = args[0].toLowerCase();
+    const commandName = args[0];
     const command = commands.get(commandName);
 
     if (command) {
-      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-        const previousCommand = userStates.get(senderId).lockedCommand;
-        if (previousCommand !== commandName) {
-          await sendMessage(senderId, { text: `🔓 Vous n'êtes plus verrouillé sur '${previousCommand}'. Basculé vers '${commandName}'.` }, pageAccessToken);
-        }
-      } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez 'stop' pour quitter.` }, pageAccessToken);
-      }
       userStates.set(senderId, { lockedCommand: commandName });
-      return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+      const response = await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+      userConversation.push({ type: 'bot', text: response });
+      return;
     }
 
-    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-      const lockedCommand = userStates.get(senderId).lockedCommand;
-      const lockedCommandInstance = commands.get(lockedCommand);
-      if (lockedCommandInstance) {
-        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
-      }
-    } else {
-      await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'stop' pour quitter." }, pageAccessToken);
-    }
+    // Si aucune commande ne correspond
+    await sendMessage(senderId, { text: "Je n'ai pas pu traiter votre demande. Essayez une commande valide ou tapez 'stop' pour quitter." }, pageAccessToken);
   }
 }
 
-// Vérifier si le message utilisateur est une suite logique d'une réponse précédente
-function isFollowUp(senderId) {
-  const conversations = userConversations.get(senderId);
-  if (!conversations || conversations.length < 2) {
-    return false; // Pas assez d'échanges pour déterminer un suivi
+// Détecter si l'utilisateur demande un suivi
+function isFollowUp(messageText, conversationHistory) {
+  const followUpKeywords = ['explique', 'développe', 'plus de détails', 'comment', 'pourquoi', 'quoi', 'ça veut dire quoi'];
+  return followUpKeywords.some(keyword => messageText.includes(keyword)) || conversationHistory.length > 0;
+}
+
+// Récupérer la dernière réponse du bot dans l'historique
+function getLastBotResponse(conversationHistory) {
+  for (let i = conversationHistory.length - 1; i >= 0; i--) {
+    if (conversationHistory[i].type === 'bot') {
+      return conversationHistory[i].text;
+    }
   }
+  return null;
+}
 
-  const lastUserMessage = conversations.slice(-2)[0];
-  const lastBotMessage = conversations.slice(-1)[0];
-
-  // Vérifier si le dernier échange est un utilisateur suivi d'une réponse bot
-  return lastUserMessage.type === 'user' && lastBotMessage.type === 'bot';
+// Générer une réponse détaillée à partir d'une réponse précédente
+async function provideDetailedResponse(lastBotResponse, userPrompt) {
+  // Appeler une API ou générer une réponse basée sur le texte précédent
+  return `Voici une explication détaillée basée sur votre dernière question :\n"${lastBotResponse}".`;
 }
 
 // Demander le prompt de l'utilisateur pour analyser l'image
