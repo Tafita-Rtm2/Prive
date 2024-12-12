@@ -46,15 +46,19 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Ajouter une reconnaissance pour les questions de suivi comme "explique bien"
-    if (isFollowUpRequest(messageText)) {
+    // Si l'utilisateur pose une question après une réponse
+    if (isFollowUp(senderId)) {
       const lastBotResponse = userConversations
         .get(senderId)
         .filter(entry => entry.type === 'bot') // Filtrer les réponses du bot
         .slice(-1)[0]; // Récupérer la dernière réponse
 
       if (lastBotResponse) {
-        await sendMessage(senderId, { text: `Voici une explication détaillée de ma réponse précédente : ${lastBotResponse.text}` }, pageAccessToken);
+        await sendMessage(
+          senderId,
+          { text: `🔍 Vous avez dit : "${messageText}". Voici une réponse basée sur ma dernière réponse : ${lastBotResponse.text}` },
+          pageAccessToken
+        );
       } else {
         await sendMessage(senderId, { text: "Je n'ai pas de réponse récente à développer. Posez-moi une question d'abord ! 😊" }, pageAccessToken);
       }
@@ -90,10 +94,18 @@ async function handleMessage(event, pageAccessToken) {
   }
 }
 
-// Vérifier si le message est une demande de suivi
-function isFollowUpRequest(message) {
-  const followUpTriggers = ['explique', 'explique bien', 'développe', 'plus de détails'];
-  return followUpTriggers.some(trigger => message.toLowerCase().includes(trigger));
+// Vérifier si le message utilisateur est une suite logique d'une réponse précédente
+function isFollowUp(senderId) {
+  const conversations = userConversations.get(senderId);
+  if (!conversations || conversations.length < 2) {
+    return false; // Pas assez d'échanges pour déterminer un suivi
+  }
+
+  const lastUserMessage = conversations.slice(-2)[0];
+  const lastBotMessage = conversations.slice(-1)[0];
+
+  // Vérifier si le dernier échange est un utilisateur suivi d'une réponse bot
+  return lastUserMessage.type === 'user' && lastBotMessage.type === 'bot';
 }
 
 // Demander le prompt de l'utilisateur pour analyser l'image
