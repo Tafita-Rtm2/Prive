@@ -2,7 +2,7 @@ const axios = require('axios');
 
 module.exports = {
   name: 'gpt4o-pro',
-  description: 'Analyse une image ou répond à une question via l’API Kaiz.',
+  description: 'Analyse une image ou répond à une question via l’API GPT4o.',
   author: 'Kaiz Integration',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -19,39 +19,22 @@ module.exports = {
 
     try {
       let apiUrl;
-      let isImageAnalysis = false;
 
-      // Déterminer le type de requête (analyse d'image ou question texte)
-      if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        isImageAnalysis = true;
-        const imageUrl = prompt;
+      // Construire l'URL pour une question texte
+      apiUrl = `https://markdevs-last-api-2epw.onrender.com/api/v2/gpt4?query=${encodeURIComponent(prompt)}`;
 
-        // Construire l'URL pour l'analyse d'image
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
+      // Informer l'utilisateur que la réponse est en cours de génération
+      await sendMessage(
+        senderId,
+        { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
+        pageAccessToken
+      );
 
-        // Informer l'utilisateur que l'analyse de l'image est en cours
-        await sendMessage(
-          senderId,
-          { text: '📷 Analyse de votre image en cours⏳...\n\n─────★─────' },
-          pageAccessToken
-        );
-      } else {
-        // Construire l'URL pour une question texte
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-
-        // Informer l'utilisateur que la réponse est en cours de génération
-        await sendMessage(
-          senderId,
-          { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
-          pageAccessToken
-        );
-      }
-
-      // Appel à l'API Kaiz
+      // Appel à l'API GPT4o
       const response = await axios.get(apiUrl);
 
       // Vérifier si la réponse est valide
-      const text = response.data?.response || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      const text = response.data?.respond || "Désolé, je n'ai pas pu obtenir une réponse valide.";
 
       // Formater la réponse finale
       const formattedResponse = `─────★─────\n` +
@@ -69,7 +52,7 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Kaiz :', error);
+      console.error('Erreur lors de l\'appel à l\'API GPT4o :', error);
 
       // Envoyer un message d'erreur si l'appel API échoue
       await sendMessage(
