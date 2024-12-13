@@ -9,7 +9,7 @@ module.exports = {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "Veuillez entrer une question valide." }, pageAccessToken);
+      return sendMessage(senderId, { text: "─────★─────\n✨Llama meta AI\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." }, pageAccessToken);
     }
 
     try {
