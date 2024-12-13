@@ -28,10 +28,16 @@ module.exports = {
 
       console.log('Réponse API:', response.data);
 
+      // Vérification de la réponse de l'API
       if (response.data && response.data.image_url) {
         const imageUrl = response.data.image_url;
 
         console.log('URL de l\'image générée:', imageUrl);
+
+        // Vérification si l'URL est valide
+        if (!imageUrl.startsWith('http')) {
+          throw new Error("L'URL retournée par l'API n'est pas valide.");
+        }
 
         // Téléchargement de l'image
         const imagePath = path.resolve(__dirname, 'generated-image.jpg');
@@ -73,7 +79,7 @@ module.exports = {
 
       // Informer l'utilisateur de l'erreur
       await sendMessage(senderId, {
-        text: "❌ Une erreur est survenue : " + (error.response ? error.response.data : error.message)
+        text: "❌ Une erreur est survenue : " + (error.response ? JSON.stringify(error.response.data) : error.message)
       }, pageAccessToken);
     }
   },
