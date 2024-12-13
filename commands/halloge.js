@@ -23,11 +23,11 @@ module.exports = {
       }, pageAccessToken);
 
       // Appeler l'API pour générer l'image
-      const apiUrl = `https://api.kenliejugarap.com/flux-realism/?prompt=${encodeURIComponent(prompt)}`;
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/flux-1.1-pro?prompt=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      if (response.data.status && response.data.response) {
-        const imageUrl = response.data.response;
+      if (response.data && response.data.image_url) {
+        const imageUrl = response.data.image_url;
 
         // Téléchargement de l'image
         const imagePath = path.resolve(__dirname, 'generated-image.jpg');
