@@ -1,8 +1,8 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'idea-creat',
-  description: 'Pose une question à l\'API Idea et retourne une réponse.',
+  name: 'claude-sonnet',
+  description: 'Pose une question à Claude Sonnet 3.5 via l’API fournie.',
   author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -14,10 +14,10 @@ module.exports = {
 
     try {
       // Informer l'utilisateur que la réponse est en cours
-      await sendMessage(senderId, { text: '💬 Idea AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(senderId, { text: '💬 Claude Sonnet 3.5 est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Construire l'URL de l'API Idea
-      const apiUrl = `https://ccprojectapis.ddns.net/api/idea?prompt=${encodeURIComponent(prompt)}`;
+      // Construire l'URL de l'API
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/claude-sonnet-3.5?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
       const response = await axios.get(apiUrl);
 
       // Extraire le texte de réponse
@@ -28,7 +28,7 @@ module.exports = {
 
       // Formater la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨Idea AI\n\n${text}\n` +
+                                `✨Claude Sonnet 3.5\n\n${text}\n` +
                                 `─────★─────\n` +
                                 `🕒 ${madagascarTime}`;
 
@@ -44,7 +44,7 @@ module.exports = {
       }
 
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Idea :', error);
+      console.error('Erreur lors de l\'appel à l\'API Claude Sonnet 3.5 :', error);
       // Envoyer un message d'erreur en cas de problème
       await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
