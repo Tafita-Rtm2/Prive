@@ -1,9 +1,10 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'meta-ai',
-  description: 'Pose une question à Meta AI via l’API fournie.',
-  author: 'Deku (rest api)',
+  name: 'llama-meta-ai',
+  description: 'Pose une question à l\'API Llama et retourne une réponse.',
+  author: 'Votre nom',
+
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
@@ -12,20 +13,24 @@ module.exports = {
     }
 
     try {
-      // Envoyer un message indiquant que Meta AI est en train de répondre
-      await sendMessage(senderId, { text: '💬 Meta AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      // Informer l'utilisateur que la réponse est en cours
+      await sendMessage(senderId, { text: '💬 Llama AI est en train de te répondre⏳...\n\n─────★─────' }, pageAccessToken);
 
-      // Construire l'URL de l'API Meta AI
-      const apiUrl = `https://api.kenliejugarap.com/llama/?question=${encodeURIComponent(prompt)}`;
+      // Construire l'URL de l'API Llama
+      const apiUrl = `https://ccprojectapis.ddns.net/api/llama31?q=${encodeURIComponent(prompt)}&id=${encodeURIComponent(senderId)}`;
       const response = await axios.get(apiUrl);
 
-      // Vérifier si la réponse contient le texte attendu
-      const text = response.data.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+      // Extraire le texte de réponse
+      const text = response.data?.response?.message || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+
+      // Obtenir la date et l'heure actuelles de Madagascar
+      const madagascarTime = getMadagascarTime();
 
       // Formater la réponse
       const formattedResponse = `─────★─────\n` +
-                                `✨Meta AI\n\n${text}\n` +
-                                `─────★─────`;
+                                `✨Llama AI\n\n${text}\n` +
+                                `─────★─────\n` +
+                                `🕒 ${madagascarTime}`;
 
       // Gérer les réponses longues
       const maxMessageLength = 2000;
@@ -39,14 +44,30 @@ module.exports = {
       }
 
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Meta AI :', error);
+      console.error('Erreur lors de l\'appel à l\'API Llama :', error);
       // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: 'Désolé, une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour découper les messages longs
+// Fonction pour obtenir l'heure et la date de Madagascar
+function getMadagascarTime() {
+  const options = { timeZone: 'Indian/Antananarivo', hour12: false };
+  const madagascarDate = new Date().toLocaleString('fr-FR', {
+    ...options,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:40:45"
+}
+
+// Fonction utilitaire pour découper un message en morceaux
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
   for (let i = 0; i < message.length; i += chunkSize) {
