@@ -12,7 +12,7 @@ module.exports = {
 
     if (!prompt) {
       return sendMessage(senderId, {
-        text: "❌ Veuillez fournir une description valide pour générer une image."
+        text: "Bienvenue ! 👋 Je suis prêt à générer des images pour vous. 🖼️ Veuillez écrire la description de l'image que vous souhaitez, et je la transformerai en réalité visuelle de vos rêves ! ✨🎨."
       }, pageAccessToken);
     }
 
@@ -26,15 +26,19 @@ module.exports = {
       const apiUrl = `https://kaiz-apis.gleeze.com/api/flux-1.1-pro?prompt=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
+      console.log('Réponse API:', response.data);
+
       if (response.data && response.data.image_url) {
         const imageUrl = response.data.image_url;
+
+        console.log('URL de l\'image générée:', imageUrl);
 
         // Téléchargement de l'image
         const imagePath = path.resolve(__dirname, 'generated-image.jpg');
         const imageResponse = await axios({
           url: imageUrl,
           method: 'GET',
-          responseType: 'arraybuffer', // Téléchargement du fichier binaire
+          responseType: 'arraybuffer',
         });
 
         fs.writeFileSync(imagePath, imageResponse.data);
@@ -69,7 +73,7 @@ module.exports = {
 
       // Informer l'utilisateur de l'erreur
       await sendMessage(senderId, {
-        text: "❌ Une erreur est survenue lors de la génération ou de l'envoi de l'image."
+        text: "❌ Une erreur est survenue : " + (error.response ? error.response.data : error.message)
       }, pageAccessToken);
     }
   },
