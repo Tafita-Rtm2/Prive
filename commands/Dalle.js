@@ -36,10 +36,14 @@ module.exports = {
       // Vérifier si la réponse est valide
       const text = response.data?.respond || "Désolé, je n'ai pas pu obtenir une réponse valide.";
 
+      // Obtenir la date et l'heure actuelle de Madagascar
+      const madagascarTime = getMadagascarTime();
+
       // Formater la réponse finale
       const formattedResponse = `─────★─────\n` +
                                 `✨Gpt4o pro\n\n${text}\n` +
-                                `─────★─────`;
+                                `─────★─────\n` +
+                                `🕒 ${madagascarTime}`;
 
       // Gérer les réponses longues (découper en morceaux si nécessaire)
       const maxMessageLength = 2000;
@@ -63,6 +67,22 @@ module.exports = {
     }
   }
 };
+
+// Fonction pour obtenir l'heure et la date de Madagascar
+function getMadagascarTime() {
+  const options = { timeZone: 'Indian/Antananarivo', hour12: false };
+  const madagascarDate = new Date().toLocaleString('fr-FR', {
+    ...options,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:30:45"
+}
 
 // Fonction utilitaire pour découper un message en morceaux
 function splitMessageIntoChunks(message, chunkSize) {
