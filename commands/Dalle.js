@@ -12,7 +12,7 @@ module.exports = {
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: "─────★─────\n✨Gemini AI\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." },
+        { text: "─────★─────\n✨Gpt4o pro\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." },
         pageAccessToken
       );
     }
