@@ -1,77 +1,97 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'claude-sonnet',
-  description: 'Pose une question à Claude Sonnet 3.5 via l’API fournie.',
-  author: 'Votre nom',
+  name: 'humanize',
+  description: 'Humanize your AI-written works',
+  author: 'Clarence',
+  role: 1,
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
+    // Vérifier si un prompt valide est fourni
     if (!prompt) {
-      return sendMessage(senderId, { text: "─────★─────\n✨Claude Sonnet 3.5\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        { text: "Bienvenue sur l'humanisation des textes d'intelligence artificielle ! 👋🤖\n\nJe suis Humanizine, prêt à humaniser tous vos textes créés par des intelligences artificielles. 🌟✍️\n\nVeuillez entrer votre texte, et je l'humaniserai pour vous. 📝🔍." },
+        pageAccessToken
+      );
     }
 
     try {
-      // Informer l'utilisateur que la réponse est en cours
-      await sendMessage(senderId, { text: '💬 Claude Sonnet 3.5 est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      // Activer le mode de saisie
+      await typingIndicator(senderId, pageAccessToken);
 
-      // Construire l'URL de l'API
-      const apiUrl = `https://kaiz-apis.gleeze.com/api/claude-sonnet-3.5?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+      // Appeler l'API Humanizer
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/humanizer?q=${encodeURIComponent(prompt)}`;
       const response = await axios.get(apiUrl);
 
-      // Extraire le texte de réponse
-      const text = response.data?.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+      // Vérifier si une réponse valide est reçue
+      const text = response.data.response || "Désolé, aucun résultat valide n'a été obtenu.";
 
-      // Obtenir la date et l'heure actuelles de Madagascar
-      const madagascarTime = getMadagascarTime();
-
-      // Formater la réponse
-      const formattedResponse = `─────★─────\n` +
-                                `✨Claude Sonnet 3.5\n\n${text}\n` +
-                                `─────★─────\n` +
-                                `🕒 ${madagascarTime}`;
-
-      // Gérer les réponses longues
+      // Gérer les réponses longues en découpant en morceaux si nécessaire
       const maxMessageLength = 2000;
-      if (formattedResponse.length > maxMessageLength) {
-        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+      if (text.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(text, maxMessageLength);
         for (const message of messages) {
           await sendMessage(senderId, { text: message }, pageAccessToken);
         }
       } else {
-        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+        await sendMessage(senderId, { text }, pageAccessToken);
       }
-
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Claude Sonnet 3.5 :', error);
-      // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      console.error("Erreur lors de l'appel à l'API Humanize :", error);
+
+      // Envoyer un message d'erreur si l'appel API échoue
+      await sendMessage(
+        senderId,
+        { text: "❌ Une erreur est survenue. Veuillez réessayer plus tard." },
+        pageAccessToken
+      );
     }
-  }
+  },
 };
 
-// Fonction pour obtenir l'heure et la date de Madagascar
-function getMadagascarTime() {
-  const options = { timeZone: 'Indian/Antananarivo', hour12: false };
-  const madagascarDate = new Date().toLocaleString('fr-FR', {
-    ...options,
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:40:45"
+// Fonction utilitaire : Activer le mode de saisie
+async function typingIndicator(senderId, pageAccessToken) {
+  if (!senderId) {
+    console.error('Invalid senderId for typing indicator.');
+    return;
+  }
+
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v13.0/me/messages`,
+      {
+        recipient: { id: senderId },
+        sender_action: 'typing_on',
+      },
+      {
+        params: { access_token: pageAccessToken },
+      }
+    );
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi de l\'indicateur de saisie :', error.response?.data || error.message);
+  }
 }
 
-// Fonction utilitaire pour découper un message en morceaux
+// Fonction utilitaire : Découper un message en morceaux
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
-  for (let i = 0; i < message.length; i += chunkSize) {
-    chunks.push(message.slice(i, i + chunkSize));
+  let chunk = '';
+  const words = message.split(' ');
+
+  for (const word of words) {
+    if ((chunk + word).length > chunkSize) {
+      chunks.push(chunk.trim());
+      chunk = '';
+    }
+    chunk += `${word} `;
   }
+
+  if (chunk) {
+    chunks.push(chunk.trim());
+  }
+
   return chunks;
 }
