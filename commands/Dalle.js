@@ -12,7 +12,7 @@ module.exports = {
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: "Veuillez fournir une question ou une URL d'image valide." },
+        { text: "─────★─────\n✨Gemini AI\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." },
         pageAccessToken
       );
     }
@@ -32,7 +32,7 @@ module.exports = {
         // Informer l'utilisateur que l'analyse de l'image est en cours
         await sendMessage(
           senderId,
-          { text: '📷 Analyse de votre image en cours⏳...\n\n─────★─────' },
+          { text: '📷 Analyse de votre image en cours⏳...\n─────★─────' },
           pageAccessToken
         );
       } else {
