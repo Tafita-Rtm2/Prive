@@ -66,7 +66,7 @@ async function handleMessage(event, pageAccessToken) {
           // Ligne supprimée ici pour éviter l'affichage
         }
       } else {
-        await sendMessage(senderId, { text: `🔒 La commande '${commandName}' est maintenant verrouillée. Tapez le bouton 'menu' pour quitter.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `` }, pageAccessToken);
       }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
