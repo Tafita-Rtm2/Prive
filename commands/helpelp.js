@@ -2,8 +2,8 @@ const axios = require('axios');
 
 module.exports = {
   name: 'aidetect',
-  description: 'Détecte si un texte est généré par une IA via l\'API aidetect.',
-  author: 'Nethwiegine API Integration',
+  description: 'Détecte si un texte est généré par une IA via l\'API AI Detector.',
+  author: 'Kaiz API Integration',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
@@ -18,8 +18,8 @@ module.exports = {
     }
 
     try {
-      // Construire l'URL pour appeler l'API aidetect
-      const apiUrl = `https://nethwieginedev.vercel.app/api/aidetect?text=${encodeURIComponent(prompt)}`;
+      // Construire l'URL pour appeler l'API aidetector-v2
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/aidetector-v2?q=${encodeURIComponent(prompt)}`;
 
       // Informer l'utilisateur que l'analyse est en cours
       await sendMessage(
@@ -28,7 +28,7 @@ module.exports = {
         pageAccessToken
       );
 
-      // Appel à l'API aidetect
+      // Appel à l'API aidetector-v2
       const response = await axios.get(apiUrl);
 
       // Vérifier si la réponse est valide
@@ -55,7 +55,7 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API aidetect :', error);
+      console.error('Erreur lors de l\'appel à l\'API AI Detector :', error);
 
       // Envoyer un message d'erreur si l'appel API échoue
       await sendMessage(
