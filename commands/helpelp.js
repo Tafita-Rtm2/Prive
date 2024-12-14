@@ -3,81 +3,73 @@ const axios = require('axios');
 module.exports = {
   name: 'aidetect',
   description: 'Détecte si un texte est généré par une IA via l\'API AI Detector.',
-  author: 'Kaiz API Integration',
-
+  
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    // Vérifier si un texte valide est fourni
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: "─────★─────\n✨AI Detect\n👋 Merci de me choisir pour vérifier vos textes ! 🧠\nVeuillez fournir un texte pour analyse.\n─────★─────." },
+        { text: "─────★─────\n✨AI Detect\n❗ Veuillez fournir un texte pour analyse.\n─────★─────." },
         pageAccessToken
       );
     }
 
     try {
-      // Construire l'URL pour appeler l'API aidetector-v2
       const apiUrl = `https://kaiz-apis.gleeze.com/api/aidetector-v2?q=${encodeURIComponent(prompt)}`;
 
-      // Informer l'utilisateur que l'analyse est en cours
       await sendMessage(
         senderId,
         { text: '🧠 Analyse de votre texte en cours⏳...\n─────★─────' },
         pageAccessToken
       );
 
-      // Appel à l'API aidetector-v2
       const response = await axios.get(apiUrl);
+      const data = response.data;
 
-      // Extraire les données de la réponse
-      const aiPercentage = response.data?.ai || "N/A";
-      const humanPercentage = response.data?.human || "N/A";
-      const message = response.data?.message || "Désolé, je n'ai pas pu obtenir une réponse valide.";
-      const wordCount = response.data?.wordcount || 0;
+      // Validation des champs retournés par l'API
+      const aiPercentage = parseFloat(data.ai);
+      const humanPercentage = parseFloat(data.human);
+      const wordCount = data.wordcount || 0;
+      const message = data.message || "Désolé, je n'ai pas pu obtenir une réponse valide.";
 
-      // Obtenir la date et l'heure actuelle de Madagascar
+      if (
+        isNaN(aiPercentage) || isNaN(humanPercentage) ||
+        aiPercentage < 0 || aiPercentage > 100 ||
+        humanPercentage < 0 || humanPercentage > 100
+      ) {
+        throw new Error('Pourcentages invalides retournés par l\'API.');
+      }
+
       const madagascarTime = getMadagascarTime();
 
-      // Formater la réponse finale
       const formattedResponse = `─────★─────\n` +
                                 `✨AI Detect\n\n` +
                                 `🔍 Résultat :\n` +
-                                `- Généré par IA : ${aiPercentage}\n` +
-                                `- Généré par un humain : ${humanPercentage}\n` +
-                                `- Nombre de mots analysés : ${wordCount}\n` +
-                                `\n📄 Message : ${message}\n` +
+                                `- Généré par IA : ${aiPercentage.toFixed(2)}%\n` +
+                                `- Généré par un humain : ${humanPercentage.toFixed(2)}%\n` +
+                                `- Nombre de mots analysés : ${wordCount}\n\n` +
+                                `📄 Message : ${message}\n` +
                                 `─────★─────\n` +
                                 `🕒 ${madagascarTime}`;
 
-      // Gérer les réponses longues (découper en morceaux si nécessaire)
-      const maxMessageLength = 2000;
-      if (formattedResponse.length > maxMessageLength) {
-        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
-        for (const message of messages) {
-          await sendMessage(senderId, { text: message }, pageAccessToken);
-        }
-      } else {
-        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-      }
-    } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API AI Detector :', error);
+      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
 
-      // Envoyer un message d'erreur si l'appel API échoue
+    } catch (error) {
+      console.error('Erreur :', error.message || error);
+
       await sendMessage(
         senderId,
-        { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
+        { text: '❌ Une erreur est survenue lors de l\'analyse du texte. Veuillez réessayer plus tard.' },
         pageAccessToken
       );
     }
   }
 };
 
-// Fonction pour obtenir l'heure et la date de Madagascar
 function getMadagascarTime() {
   const options = { timeZone: 'Indian/Antananarivo', hour12: false };
-  const madagascarDate = new Date().toLocaleString('fr-FR', {
+  return new Date().toLocaleString('fr-FR', {
     ...options,
     weekday: 'long',
     year: 'numeric',
@@ -87,14 +79,4 @@ function getMadagascarTime() {
     minute: '2-digit',
     second: '2-digit',
   });
-  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:30:45"
-}
-
-// Fonction utilitaire pour découper un message en morceaux
-function splitMessageIntoChunks(message, chunkSize) {
-  const chunks = [];
-  for (let i = 0; i < message.length; i += chunkSize) {
-    chunks.push(message.slice(i, i + chunkSize));
-  }
-  return chunks;
 }
