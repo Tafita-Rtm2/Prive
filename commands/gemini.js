@@ -9,24 +9,41 @@ module.exports = {
     const prompt = args.join(' ');
 
     if (!prompt) {
-      return sendMessage(senderId, { text: "─────★─────\n✨Claude Sonnet 3.5\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." }, pageAccessToken);
+      return sendMessage(
+        senderId,
+        {
+          text: "─────★─────\n✨Claude Sonnet 3.5\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────.",
+        },
+        pageAccessToken
+      );
     }
 
     try {
       // Informer l'utilisateur que la réponse est en cours
-      await sendMessage(senderId, { text: '💬 Claude Sonnet 3.5 est en train de répondre⏳...\n\n─────★─────' }, pageAccessToken);
+      await sendMessage(
+        senderId,
+        { text: '💬 Claude Sonnet 3.5 est en train de répondre⏳...\n\n─────★─────' },
+        pageAccessToken
+      );
 
       // Construire l'URL de l'API
-      const apiUrl = `https://kaiz-apis.gleeze.com/api/claude-sonnet-3.5?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/claude-sonnet-3.5?q=${encodeURIComponent(
+        prompt
+      )}&uid=${encodeURIComponent(senderId)}`;
+
+      // Appel à l'API
       const response = await axios.get(apiUrl);
 
-      // Extraire le texte de réponse
-      const text = response.data?.response || 'Désolé, je n\'ai pas pu obtenir une réponse valide.';
+      // Vérifier si l'API retourne une réponse valide
+      const text = response.data?.response?.trim();
+      if (!text) {
+        throw new Error('Réponse invalide de l’API.');
+      }
 
-      // Obtenir la date et l'heure actuelles de Madagascar
+      // Obtenir l'heure de Madagascar
       const madagascarTime = getMadagascarTime();
 
-      // Formater la réponse
+      // Formater la réponse correctement
       const formattedResponse = `─────★─────\n` +
                                 `✨Claude Sonnet 3.5\n\n${text}\n` +
                                 `─────★─────\n` +
@@ -42,13 +59,17 @@ module.exports = {
       } else {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
-
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Claude Sonnet 3.5 :', error);
+      console.error("Erreur lors de l'appel à l'API Claude Sonnet 3.5 :", error);
+
       // Envoyer un message d'erreur en cas de problème
-      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
+      await sendMessage(
+        senderId,
+        { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
+        pageAccessToken
+      );
     }
-  }
+  },
 };
 
 // Fonction pour obtenir l'heure et la date de Madagascar
