@@ -31,16 +31,23 @@ module.exports = {
       // Appel à l'API aidetector-v2
       const response = await axios.get(apiUrl);
 
-      // Vérifier si la réponse est valide
-      const result = response.data?.result || "Désolé, je n'ai pas pu obtenir une réponse valide.";
-      const score = response.data?.score !== undefined ? ` (Score : ${response.data.score}%)` : '';
+      // Extraire les données de la réponse
+      const aiPercentage = response.data?.ai || "N/A";
+      const humanPercentage = response.data?.human || "N/A";
+      const message = response.data?.message || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      const wordCount = response.data?.wordcount || 0;
 
       // Obtenir la date et l'heure actuelle de Madagascar
       const madagascarTime = getMadagascarTime();
 
       // Formater la réponse finale
       const formattedResponse = `─────★─────\n` +
-                                `✨AI Detect\n\nRésultat : ${result}${score}\n` +
+                                `✨AI Detect\n\n` +
+                                `🔍 Résultat :\n` +
+                                `- Généré par IA : ${aiPercentage}\n` +
+                                `- Généré par un humain : ${humanPercentage}\n` +
+                                `- Nombre de mots analysés : ${wordCount}\n` +
+                                `\n📄 Message : ${message}\n` +
                                 `─────★─────\n` +
                                 `🕒 ${madagascarTime}`;
 
