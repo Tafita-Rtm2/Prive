@@ -4,7 +4,7 @@ const path = require('path');
 const FormData = require('form-data');
 
 module.exports = {
-  name: 'image-gen-flux',
+  name: 'image-gen-dalle',
   description: 'Génère une image via l\'API Flux et l\'envoie dans Messenger.',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
