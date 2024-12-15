@@ -2,7 +2,7 @@ const axios = require('axios');
 
 module.exports = {
   name: 'gpt4o-pro',
-  description: 'Analyse une image ou répond à une question via l’API Kaiz.',
+  description: 'Analyse une image ou répond à une question via l’API Playground.',
   author: 'Kaiz Integration',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -27,7 +27,7 @@ module.exports = {
         const imageUrl = prompt;
 
         // Construire l'URL pour l'analyse d'image
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
+        apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
 
         // Informer l'utilisateur que l'analyse de l'image est en cours
         await sendMessage(
@@ -37,7 +37,7 @@ module.exports = {
         );
       } else {
         // Construire l'URL pour une question texte
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+        apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
 
         // Informer l'utilisateur que la réponse est en cours de génération
         await sendMessage(
@@ -47,7 +47,7 @@ module.exports = {
         );
       }
 
-      // Appel à l'API Kaiz
+      // Appel à l'API Playground
       const response = await axios.get(apiUrl);
 
       // Vérifier si la réponse est valide
@@ -73,7 +73,7 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Kaiz :', error);
+      console.error('Erreur lors de l\'appel à l\'API Playground :', error);
 
       // Envoyer un message d'erreur si l'appel API échoue
       await sendMessage(
