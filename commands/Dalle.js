@@ -2,66 +2,54 @@ const axios = require('axios');
 
 module.exports = {
   name: 'gpt4o-pro',
-  description: 'Analyse une image ou répond à une question via l’API Playground.',
+  description: 'Répond à une question via l’API Playground.',
   author: 'Kaiz Integration',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    // Vérifier si un prompt valide est fourni
+    // Vérification de prompt valide
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: "─────★─────\n✨Gpt4o pro\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." },
+        { text: "─────★─────\n✨Gpt4o pro\n👋 Merci de me choisir comme répondeur automatique ! ♊ Posez vos questions, je suis prêt ! 😉\n─────★─────." },
         pageAccessToken
       );
     }
 
     try {
-      let apiUrl;
+      // URL de l'API avec le prompt et l'UID
+      const apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
 
-      // Construire l'URL pour une question texte
-      apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-
-      // Informer l'utilisateur que la réponse est en cours de génération
+      // Informer l'utilisateur que la réponse est en cours
       await sendMessage(
         senderId,
-        { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
+        { text: '💬 Gpt4o pro est en train de répondre⏳...\n─────★─────' },
         pageAccessToken
       );
 
-      // Appel à l'API Playground
+      // Appel API
       const response = await axios.get(apiUrl);
 
-      // Extraire le texte de la réponse depuis la clé 'result'
-      const text = response.data?.result || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      // Extraire la réponse depuis la clé 'result'
+      const text = response.data?.result || "❌ Je n'ai pas pu obtenir une réponse valide.";
 
-      // Obtenir la date et l'heure actuelle de Madagascar
+      // Obtenir l'heure actuelle de Madagascar
       const madagascarTime = getMadagascarTime();
 
-      // Formater la réponse finale
-      const formattedResponse = `─────★─────\n` +
-                                `✨Gpt4o pro\n\n${text}\n` +
-                                `─────★─────\n` +
-                                `🕒 ${madagascarTime}`;
+      // Réponse formatée
+      const formattedResponse = `─────★─────\n✨Gpt4o pro\n\n${text}\n─────★─────\n🕒 ${madagascarTime}`;
 
-      // Gérer les réponses longues (découper en morceaux si nécessaire)
-      const maxMessageLength = 2000;
-      if (formattedResponse.length > maxMessageLength) {
-        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
-        for (const message of messages) {
-          await sendMessage(senderId, { text: message }, pageAccessToken);
-        }
-      } else {
-        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
-      }
+      // Envoyer la réponse
+      await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Playground :', error);
+      console.error("Erreur API :", error.message);
 
-      // Envoyer un message d'erreur si l'appel API échoue
+      // Gestion des erreurs
       await sendMessage(
         senderId,
-        { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
+        { text: "❌ Une erreur est survenue lors de la communication avec l'API. Veuillez réessayer plus tard." },
         pageAccessToken
       );
     }
@@ -81,14 +69,5 @@ function getMadagascarTime() {
     minute: '2-digit',
     second: '2-digit',
   });
-  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:30:45"
-}
-
-// Fonction utilitaire pour découper un message en morceaux
-function splitMessageIntoChunks(message, chunkSize) {
-  const chunks = [];
-  for (let i = 0; i < message.length; i += chunkSize) {
-    chunks.push(message.slice(i, i + chunkSize));
-  }
-  return chunks;
+  return madagascarDate;
 }
