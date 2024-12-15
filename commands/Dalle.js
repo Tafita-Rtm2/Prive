@@ -1,6 +1,5 @@
 const axios = require('axios');
 
-// Objet temporaire pour stocker les images par utilisateur
 const imageCache = {};
 
 module.exports = {
@@ -9,97 +8,48 @@ module.exports = {
   author: 'Kaiz Integration',
 
   async execute(senderId, args, attachments, pageAccessToken, sendMessage) {
-    const prompt = args.join(' ').trim(); // Texte envoyé par l'utilisateur
-
     try {
-      // --- 1. L'utilisateur envoie uniquement une image ---
-      if (attachments && attachments.length > 0 && attachments[0].type === 'image') {
-        const imageUrl = attachments[0].payload.url;
+      const prompt = args.join(' ').trim();
 
-        // Stocker temporairement l'image pour cet utilisateur
+      if (attachments && Array.isArray(attachments) && attachments.length > 0 && attachments[0]?.type === 'image') {
+        const imageUrl = attachments[0].payload?.url;
+        if (!imageUrl) throw new Error("L'URL de l'image est manquante.");
+
         imageCache[senderId] = imageUrl;
-
-        // Envoyer une demande pour ajouter du texte
-        return sendMessage(
-          senderId,
-          { text: '✅ Image reçue ! Veuillez ajouter du texte pour que je puisse analyser l’image.' },
-          pageAccessToken
-        );
+        await sendMessage(senderId, { text: '✅ Image reçue ! Veuillez ajouter du texte pour que je puisse analyser l’image.' }, pageAccessToken);
+        return;
       }
 
-      // --- 2. L'utilisateur envoie du texte uniquement ---
       if (prompt && !imageCache[senderId]) {
-        // Analyse texte uniquement
         const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+        await sendMessage(senderId, { text: '⏳ Réponse en cours de génération...' }, pageAccessToken);
 
-        // Informer l'utilisateur que la réponse est en cours
-        await sendMessage(
-          senderId,
-          { text: '⏳ Réponse en cours de génération...' },
-          pageAccessToken
-        );
-
-        // Appel API
         const response = await axios.get(apiUrl);
         const text = response.data?.response || "Désolé, aucune réponse n'a pu être obtenue.";
-
-        // Envoyer la réponse finale
-        return sendMessage(
-          senderId,
-          { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` },
-          pageAccessToken
-        );
+        return sendMessage(senderId, { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` }, pageAccessToken);
       }
 
-      // --- 3. L'utilisateur envoie du texte après avoir envoyé une image ---
       if (prompt && imageCache[senderId]) {
         const storedImageUrl = imageCache[senderId];
-
-        // Construire l'URL API avec image et texte
         const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(storedImageUrl)}&q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
 
-        // Informer que l'analyse est en cours
-        await sendMessage(
-          senderId,
-          { text: '⏳ Analyse de l’image en cours, veuillez patienter...' },
-          pageAccessToken
-        );
-
-        // Appel API
+        await sendMessage(senderId, { text: '⏳ Analyse de l’image en cours, veuillez patienter...' }, pageAccessToken);
         const response = await axios.get(apiUrl);
-        const text = response.data?.response || "Désolé, aucune réponse n'a pu être obtenue.";
 
-        // Nettoyer l'image stockée
+        const text = response.data?.response || "Désolé, aucune réponse n'a pu être obtenue.";
         delete imageCache[senderId];
 
-        // Envoyer la réponse finale
-        return sendMessage(
-          senderId,
-          { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` },
-          pageAccessToken
-        );
+        return sendMessage(senderId, { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` }, pageAccessToken);
       }
 
-      // --- 4. Aucun texte ou action incorrecte ---
-      return sendMessage(
-        senderId,
-        { text: "❌ Veuillez ajouter une image ou du texte pour commencer l'analyse." },
-        pageAccessToken
-      );
+      return sendMessage(senderId, { text: "❌ Veuillez ajouter une image ou du texte pour commencer l'analyse." }, pageAccessToken);
     } catch (error) {
       console.error('Erreur lors de l\'exécution :', error.message);
-
-      // Gestion des erreurs
-      await sendMessage(
-        senderId,
-        { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
-        pageAccessToken
-      );
+      await sendMessage(senderId, { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' }, pageAccessToken);
     }
   }
 };
 
-// Fonction pour obtenir l'heure locale de Madagascar
 function getMadagascarTime() {
   const options = { timeZone: 'Indian/Antananarivo', hour12: false };
   return new Date().toLocaleString('fr-FR', {
