@@ -10,72 +10,86 @@ module.exports = {
 
   async execute(senderId, args, attachments, pageAccessToken, sendMessage) {
     const prompt = args.join(' ').trim(); // Texte envoyé par l'utilisateur
+
     try {
-      // --- 1. L'utilisateur envoie une image ---
+      // --- 1. L'utilisateur envoie uniquement une image ---
       if (attachments && attachments.length > 0 && attachments[0].type === 'image') {
         const imageUrl = attachments[0].payload.url;
 
-        // Stocker temporairement l'image
+        // Stocker temporairement l'image pour cet utilisateur
         imageCache[senderId] = imageUrl;
 
-        // Informer l'utilisateur que l'image est reçue
+        // Envoyer une demande pour ajouter du texte
         return sendMessage(
           senderId,
-          { text: '✅ Image reçue ! Veuillez maintenant poser votre question ou fournir du texte pour l’analyse.' },
+          { text: '✅ Image reçue ! Veuillez ajouter du texte pour que je puisse analyser l’image.' },
           pageAccessToken
         );
       }
 
-      // --- 2. L'utilisateur envoie un texte ---
-      if (prompt) {
-        const storedImageUrl = imageCache[senderId]; // Vérifier si une image est stockée
-        let apiUrl;
+      // --- 2. L'utilisateur envoie du texte uniquement ---
+      if (prompt && !imageCache[senderId]) {
+        // Analyse texte uniquement
+        const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
 
-        if (storedImageUrl) {
-          // Utiliser l'image stockée + texte pour l'analyse
-          apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(storedImageUrl)}&q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-          delete imageCache[senderId]; // Nettoyer après utilisation
-        } else {
-          // Analyse texte uniquement
-          apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-        }
-
-        // Indiquer que la réponse est en cours
+        // Informer l'utilisateur que la réponse est en cours
         await sendMessage(
           senderId,
-          { text: '⏳ Analyse en cours, veuillez patienter...' },
+          { text: '⏳ Réponse en cours de génération...' },
           pageAccessToken
         );
 
         // Appel API
         const response = await axios.get(apiUrl);
-
-        // Extraire la réponse
         const text = response.data?.response || "Désolé, aucune réponse n'a pu être obtenue.";
 
-        // Formater et envoyer la réponse finale
-        const madagascarTime = getMadagascarTime();
-        const formattedResponse = `✨Gpt4o pro\n\n${text}\n🕒 ${madagascarTime}`;
+        // Envoyer la réponse finale
+        return sendMessage(
+          senderId,
+          { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` },
+          pageAccessToken
+        );
+      }
 
+      // --- 3. L'utilisateur envoie du texte après avoir envoyé une image ---
+      if (prompt && imageCache[senderId]) {
+        const storedImageUrl = imageCache[senderId];
+
+        // Construire l'URL API avec image et texte
+        const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(storedImageUrl)}&q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
+
+        // Informer que l'analyse est en cours
         await sendMessage(
           senderId,
-          { text: formattedResponse },
+          { text: '⏳ Analyse de l’image en cours, veuillez patienter...' },
           pageAccessToken
         );
 
-        return;
+        // Appel API
+        const response = await axios.get(apiUrl);
+        const text = response.data?.response || "Désolé, aucune réponse n'a pu être obtenue.";
+
+        // Nettoyer l'image stockée
+        delete imageCache[senderId];
+
+        // Envoyer la réponse finale
+        return sendMessage(
+          senderId,
+          { text: `✨Gpt4o pro\n\n${text}\n🕒 ${getMadagascarTime()}` },
+          pageAccessToken
+        );
       }
 
-      // --- 3. Aucun texte ni image n'est envoyé ---
+      // --- 4. Aucun texte ou action incorrecte ---
       return sendMessage(
         senderId,
-        { text: "❌ Veuillez envoyer une image ou poser une question texte pour continuer." },
+        { text: "❌ Veuillez ajouter une image ou du texte pour commencer l'analyse." },
         pageAccessToken
       );
     } catch (error) {
       console.error('Erreur lors de l\'exécution :', error.message);
 
-      // Gestion des erreurs : réponse utilisateur
+      // Gestion des erreurs
       await sendMessage(
         senderId,
         { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
