@@ -19,39 +19,22 @@ module.exports = {
 
     try {
       let apiUrl;
-      let isImageAnalysis = false;
 
-      // Déterminer le type de requête (analyse d'image ou question texte)
-      if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        isImageAnalysis = true;
-        const imageUrl = prompt;
+      // Construire l'URL pour une question texte
+      apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
 
-        // Construire l'URL pour l'analyse d'image
-        apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
-
-        // Informer l'utilisateur que l'analyse de l'image est en cours
-        await sendMessage(
-          senderId,
-          { text: '📷 Analyse de votre image en cours⏳...\n─────★─────' },
-          pageAccessToken
-        );
-      } else {
-        // Construire l'URL pour une question texte
-        apiUrl = `https://playground.y2pheq.me/gpt4?prompt=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-
-        // Informer l'utilisateur que la réponse est en cours de génération
-        await sendMessage(
-          senderId,
-          { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
-          pageAccessToken
-        );
-      }
+      // Informer l'utilisateur que la réponse est en cours de génération
+      await sendMessage(
+        senderId,
+        { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
+        pageAccessToken
+      );
 
       // Appel à l'API Playground
       const response = await axios.get(apiUrl);
 
-      // Vérifier si la réponse est valide
-      const text = response.data?.response || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      // Extraire le texte de la réponse depuis la clé 'result'
+      const text = response.data?.result || "Désolé, je n'ai pas pu obtenir une réponse valide.";
 
       // Obtenir la date et l'heure actuelle de Madagascar
       const madagascarTime = getMadagascarTime();
