@@ -7,10 +7,11 @@ const { handlePostback } = require('./handles/handlePostback');
 const app = express();
 app.use(bodyParser.json());
 
+// Token de vérification et d'accès
 const VERIFY_TOKEN = 'pagebot';
-
 const PAGE_ACCESS_TOKEN = fs.readFileSync('token.txt', 'utf8').trim();
 
+// Route GET pour vérifier le webhook
 app.get('/webhook', (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
@@ -19,13 +20,14 @@ app.get('/webhook', (req, res) => {
   if (mode && token) {
     if (mode === 'subscribe' && token === VERIFY_TOKEN) {
       console.log('WEBHOOK_VERIFIED');
-      res.status(200).send(challenge);
+      return res.status(200).send(challenge);
     } else {
-      res.sendStatus(403);
+      return res.sendStatus(403); // Erreur si le token est incorrect
     }
   }
 });
 
+// Route POST pour gérer les événements Facebook Messenger
 app.post('/webhook', (req, res) => {
   const body = req.body;
 
@@ -33,20 +35,18 @@ app.post('/webhook', (req, res) => {
     body.entry.forEach(entry => {
       entry.messaging.forEach(event => {
         if (event.message) {
-          handleMessage(event, PAGE_ACCESS_TOKEN);
+          handleMessage(event, PAGE_ACCESS_TOKEN); // Gérer les messages
         } else if (event.postback) {
-          handlePostback(event, PAGE_ACCESS_TOKEN);
+          handlePostback(event, PAGE_ACCESS_TOKEN); // Gérer les postbacks
         }
       });
     });
 
-    res.status(200).send('EVENT_RECEIVED');
+    return res.status(200).send('EVENT_RECEIVED'); // Confirmer la réception des événements
   } else {
-    res.sendStatus(404);
+    return res.sendStatus(404); // Erreur si ce n'est pas un événement page
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Exporter l'application pour Vercel
+module.exports = app;
