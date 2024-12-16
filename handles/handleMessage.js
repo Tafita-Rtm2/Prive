@@ -23,7 +23,7 @@ const commands = new Map();
 const userStates = new Map();
 const userConversations = new Map();
 
-// Charger les commandes
+// Charger les commandes dynamiquement
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
   const command = require(`../commands/${file}`);
@@ -68,9 +68,7 @@ async function handleMessage(event, pageAccessToken) {
     return;
   }
 
-  // **Étape 2 : Ton code EXISTANT commence ici (inchangé)**
-
-  // Ajouter le message reçu à l'historique de l'utilisateur
+  // **Étape 2 : Gestion des commandes et des messages**
   if (!userConversations.has(senderId)) {
     userConversations.set(senderId, []);
   }
