@@ -4,40 +4,48 @@ const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
-const userStates = new Map(); // Suivi des états des utilisateurs
-const userConversations = new Map(); // Historique des conversations des utilisateurs
+const userStates = new Map();
+const userConversations = new Map();
 
-const USERS_FILE = path.join(__dirname, '../handles/User.json');
-const ACTIVATION_KEY = '2201018280'; // Code maître pour générer des codes
-const ACTIVATION_DAYS = 30; // Durée de validité des abonnements
+const usersFilePath = path.join(__dirname, '../handle/User.json');
+const CODE_GENERATION_KEY = '2201018280';
 
-// Charger les utilisateurs existants
+// Charger les commandes
+const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = require(`../commands/${file}`);
+  commands.set(command.name, command);
+}
+
+// Charger les utilisateurs
 function loadUsers() {
-  if (!fs.existsSync(USERS_FILE)) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify({}, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+  if (!fs.existsSync(usersFilePath)) return {};
+  return JSON.parse(fs.readFileSync(usersFilePath, 'utf8'));
 }
 
-// Sauvegarder les utilisateurs
 function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+  fs.writeFileSync(usersFilePath, JSON.stringify(users, null, 2));
 }
 
-// Vérifier si un utilisateur est abonné
-function isUserSubscribed(userId) {
+// Vérifier si l'utilisateur a un abonnement actif
+function isSubscriptionActive(senderId) {
   const users = loadUsers();
-  if (users[userId]) {
-    const expiration = new Date(users[userId].expiresAt);
-    return new Date() < expiration; // Vérifie si l'abonnement est encore valide
-  }
-  return false;
+  if (!users[senderId]) return false;
+
+  const currentDate = new Date();
+  const expirationDate = new Date(users[senderId].expiration);
+  return currentDate <= expirationDate;
 }
 
-// Fonction pour gérer les messages entrants
+// Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
   const users = loadUsers();
+
+  // Vérifier l'abonnement de l'utilisateur
+  if (!isSubscriptionActive(senderId)) {
+    return await handleSubscription(senderId, event.message.text, pageAccessToken);
+  }
 
   // Ajouter le message reçu à l'historique
   if (!userConversations.has(senderId)) {
@@ -45,36 +53,20 @@ async function handleMessage(event, pageAccessToken) {
   }
   userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
-  // Vérification de l'abonnement
-  if (!isUserSubscribed(senderId)) {
-    if (!userStates.has(senderId)) {
-      userStates.set(senderId, { awaitingActivation: true });
-      return await sendMessage(senderId, { text: "🔒 Pour utiliser mes services, veuillez fournir un code d'activation. Si vous n'en avez pas, contactez RTM Tafitaniana pour un abonnement de 30 jours à 3000Ar (WhatsApp : +261385858330)." }, pageAccessToken);
-    }
-
-    const code = event.message.text.trim();
-    if (/^\d{4}$/.test(code)) {
-      const validCode = generateValidCode(ACTIVATION_KEY);
-      if (validCode.includes(code)) {
-        // Activer l'abonnement
-        const expirationDate = new Date();
-        expirationDate.setDate(expirationDate.getDate() + ACTIVATION_DAYS);
-        users[senderId] = { code, expiresAt: expirationDate };
-
-        saveUsers(users);
-        userStates.delete(senderId);
-        return await sendMessage(senderId, { text: `✅ Votre abonnement a été activé avec succès.\nDate d'activation : ${new Date().toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}\nDate d'expiration : ${expirationDate.toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}.\n\nMerci d'utiliser nos services !` }, pageAccessToken);
-      } else {
-        return await sendMessage(senderId, { text: "❌ Code invalide. Veuillez fournir un code valide ou contacter RTM Tafitaniana pour un abonnement." }, pageAccessToken);
-      }
-    } else {
-      return await sendMessage(senderId, { text: "⚠️ Le code doit être composé de 4 chiffres. Veuillez réessayer." }, pageAccessToken);
-    }
-  }
-
-  // Si abonné, continuer les commandes
-  if (event.message.text) {
+  // Gestion des images
+  if (event.message.attachments && event.message.attachments[0].type === 'image') {
+    const imageUrl = event.message.attachments[0].payload.url;
+    await askForImagePrompt(senderId, imageUrl, pageAccessToken);
+  } else if (event.message.text) {
     const messageText = event.message.text.trim();
+
+    // Commande "stop"
+    if (messageText.toLowerCase() === 'stop') {
+      userStates.delete(senderId);
+      return await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez 'menu' pour continuer ✔." }, pageAccessToken);
+    }
+
+    // Traitement des commandes
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
     const command = commands.get(commandName);
@@ -83,18 +75,54 @@ async function handleMessage(event, pageAccessToken) {
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    await sendMessage(senderId, { text: "⚠️ Commande inconnue. Tapez 'menu' pour voir les options disponibles." }, pageAccessToken);
+    await sendMessage(senderId, { text: "Tapez 'menu' pour voir les options disponibles." }, pageAccessToken);
   }
 }
 
-// Générer des codes valides (simulation)
-function generateValidCode(key) {
-  const codes = [];
-  for (let i = 0; i < 10; i++) {
-    const code = (parseInt(key) + i).toString().slice(-4); // Générer 4 chiffres
-    codes.push(code);
+// Gestion de l'abonnement
+async function handleSubscription(senderId, code, pageAccessToken) {
+  if (!code) {
+    return await sendMessage(senderId, {
+      text: "🔒 Pour utiliser ce service, veuillez fournir un code d'activation.\n\nSi vous n'avez pas de code, abonnez-vous en contactant RTM Tafitaniana :\n📞 WhatsApp : +261385858330\n📞 Téléphone : 0385858330\n💰 Prix : 3000 Ar pour 30 jours."
+    }, pageAccessToken);
   }
-  return codes;
+
+  const users = loadUsers();
+
+  // Valider le code
+  if (validateCode(code)) {
+    const expirationDate = new Date();
+    expirationDate.setDate(expirationDate.getDate() + 30); // Ajouter 30 jours
+
+    users[senderId] = { expiration: expirationDate.toISOString() };
+    saveUsers(users);
+
+    return await sendMessage(senderId, {
+      text: `✅ Votre abonnement a été activé avec succès !\n📅 Date d'expiration : ${expirationDate.toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}\n\nMerci d'utiliser notre service !`
+    }, pageAccessToken);
+  } else {
+    return await sendMessage(senderId, {
+      text: "❌ Code invalide. Veuillez fournir un code d'activation valide ou contacter RTM Tafitaniana pour en obtenir un."
+    }, pageAccessToken);
+  }
+}
+
+// Fonction pour valider le code d'activation
+function validateCode(code) {
+  // Le code est valide s'il est généré avec la clé principale
+  const validCode = generateActivationCode(CODE_GENERATION_KEY);
+  return code === validCode;
+}
+
+// Fonction pour générer un code d'activation (exemple simple)
+function generateActivationCode(key) {
+  const now = new Date();
+  const day = now.getDate().toString().padStart(2, '0');
+  const month = (now.getMonth() + 1).toString().padStart(2, '0');
+  const year = now.getFullYear().toString().slice(-2);
+
+  // Exemple : code à 4 chiffres basé sur le jour, mois et clé
+  return `${key.slice(-4)}${day}${month}${year}`;
 }
 
 module.exports = { handleMessage };
