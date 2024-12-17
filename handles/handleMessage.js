@@ -7,6 +7,31 @@ const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userConversations = new Map(); // Historique des conversations des utilisateurs
 
+// Variables d'abonnement
+const subscriptionCodeGenerator = "2201018280";
+const userSubscriptions = new Map(); // Utilisateurs et leurs dates d'expiration d'abonnement
+
+// Fonction pour générer un code d'activation à partir du code de génération
+function generateActivationCode() {
+  // Dans cet exemple simple on va juste générer 8 chiffres aleatoire. Vous pourriez utiliser une autre logique de génération ici
+  return Math.floor(10000000 + Math.random() * 90000000).toString();
+}
+
+// Fonction pour valider un code d'activation à partir du code de génération
+function isActivationCodeValid(code) {
+  // Dans cet exemple simple on vérifie juste que le code soit un nombre de 8 chiffres
+  return /^\d{8}$/.test(code);
+}
+
+// Fonction pour vérifier si un utilisateur a un abonnement actif
+function isUserSubscribed(userId) {
+  if (!userSubscriptions.has(userId)) {
+    return false;
+  }
+  const expirationDate = userSubscriptions.get(userId);
+  return expirationDate > new Date();
+}
+
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
@@ -17,6 +42,50 @@ for (const file of commandFiles) {
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
+
+  // Vérification de l'abonnement
+  if (!isUserSubscribed(senderId)) {
+    const messageText = event.message.text ? event.message.text.trim() : '';
+    if (messageText) { // Vérifier que c'est pas juste un envoie d'image.
+      // Demande du code d'activation
+      if (!userStates.has(senderId) || !userStates.get(senderId).awaitingSubscription) {
+        userStates.set(senderId, { awaitingSubscription: true });
+        await sendMessage(senderId, {
+          text:
+            "Pour utiliser nos services, veuillez fournir le code d'activation.\n\nSi vous n'avez pas encore de code d'activation, veuillez vous abonner à RTM Tafitaniana via Facebook ou appeler directement sur WhatsApp +261385858330 ou sur le numéro 0385858330.\n\nL'abonnement coûte 3000 AR pour une validation de 30 jours.",
+        }, pageAccessToken);
+        return;
+      }
+
+
+      // Gestion du code d'activation
+      if (userStates.has(senderId) && userStates.get(senderId).awaitingSubscription) {
+        const activationCode = messageText;
+
+        if (isActivationCodeValid(activationCode)) {
+          // Ajout de la logique d'abonnement réussie
+          const now = new Date();
+          const expirationDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 jours d'expiration
+
+          userSubscriptions.set(senderId, expirationDate);
+          userStates.delete(senderId); // Supprime l'état d'attente de l'abonnement
+
+          await sendMessage(senderId, {
+            text: `Votre abonnement est activé avec succès le ${now.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\nExpire le ${expirationDate.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\n\nMerci d'utiliser notre service, nous vous proposons toujours un bon service.`
+          }, pageAccessToken);
+          return;
+
+        } else {
+          await sendMessage(senderId, {
+            text: "Votre code est invalide. Veuillez faire un abonnement pour obtenir un code valide de 30 jours..."
+          }, pageAccessToken);
+          return;
+        }
+
+      }
+      return;
+    }
+  }
 
   // Ajouter le message reçu à l'historique de l'utilisateur
   if (!userConversations.has(senderId)) {
