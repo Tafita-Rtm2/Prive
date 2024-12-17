@@ -40,30 +40,36 @@ function isSubscriptionActive(senderId) {
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
-  const users = loadUsers();
 
-  // Vérifier l'abonnement de l'utilisateur
+  // Vérification de l'abonnement
   if (!isSubscriptionActive(senderId)) {
     return await handleSubscription(senderId, event.message.text, pageAccessToken);
   }
 
-  // Ajouter le message reçu à l'historique
+  // Ajouter le message reçu à l'historique de l'utilisateur
   if (!userConversations.has(senderId)) {
     userConversations.set(senderId, []);
   }
   userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
-  // Gestion des images
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
-    // Commande "stop"
+    // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      return await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez 'menu' pour continuer ✔." }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
+      return;
+    }
+
+    // Si l'utilisateur attend une analyse d'image
+    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const { imageUrl } = userStates.get(senderId);
+      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
+      return;
     }
 
     // Traitement des commandes
@@ -72,6 +78,8 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
+      await sendMessage(senderId, { text: `` }, pageAccessToken);
+      userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
@@ -83,46 +91,80 @@ async function handleMessage(event, pageAccessToken) {
 async function handleSubscription(senderId, code, pageAccessToken) {
   if (!code) {
     return await sendMessage(senderId, {
-      text: "🔒 Pour utiliser ce service, veuillez fournir un code d'activation.\n\nSi vous n'avez pas de code, abonnez-vous en contactant RTM Tafitaniana :\n📞 WhatsApp : +261385858330\n📞 Téléphone : 0385858330\n💰 Prix : 3000 Ar pour 30 jours."
+      text: "🔒 Pour utiliser ce service, veuillez fournir un code d'activation valide.\n\nSi vous n'avez pas de code, contactez l'administrateur :\n📞 Téléphone : +261385858330\n💰 Prix : 3000 Ar pour 30 jours."
     }, pageAccessToken);
   }
 
   const users = loadUsers();
 
-  // Valider le code
+  // Validation du code
   if (validateCode(code)) {
     const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + 30); // Ajouter 30 jours
+    expirationDate.setDate(expirationDate.getDate() + 30); // Abonnement pour 30 jours
 
     users[senderId] = { expiration: expirationDate.toISOString() };
     saveUsers(users);
 
     return await sendMessage(senderId, {
-      text: `✅ Votre abonnement a été activé avec succès !\n📅 Date d'expiration : ${expirationDate.toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}\n\nMerci d'utiliser notre service !`
+      text: `✅ Votre abonnement a été activé avec succès !\n📅 Expiration : ${expirationDate.toLocaleDateString('fr-FR')}\n\nMerci d'utiliser notre service !`
     }, pageAccessToken);
   } else {
     return await sendMessage(senderId, {
-      text: "❌ Code invalide. Veuillez fournir un code d'activation valide ou contacter RTM Tafitaniana pour en obtenir un."
+      text: "❌ Code invalide. Veuillez entrer un code valide ou contacter l'administrateur."
     }, pageAccessToken);
   }
 }
 
-// Fonction pour valider le code d'activation
+// Fonction pour valider le code
 function validateCode(code) {
-  // Le code est valide s'il est généré avec la clé principale
   const validCode = generateActivationCode(CODE_GENERATION_KEY);
   return code === validCode;
 }
 
-// Fonction pour générer un code d'activation (exemple simple)
+// Générer un code d'activation simple
 function generateActivationCode(key) {
   const now = new Date();
   const day = now.getDate().toString().padStart(2, '0');
   const month = (now.getMonth() + 1).toString().padStart(2, '0');
   const year = now.getFullYear().toString().slice(-2);
 
-  // Exemple : code à 4 chiffres basé sur le jour, mois et clé
   return `${key.slice(-4)}${day}${month}${year}`;
+}
+
+// Demander le prompt pour une image
+async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
+  userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? Posez toutes vos questions ! 📸😊." }, pageAccessToken);
+}
+
+// Fonction pour analyser l'image
+async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
+  try {
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant... 🤔⏳" }, pageAccessToken);
+
+    const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
+
+    if (imageAnalysis) {
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
+    } else {
+      await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'analyse de l\'image :', error);
+    await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
+  }
+}
+
+async function analyzeImageWithGemini(imageUrl, prompt) {
+  const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
+
+  try {
+    const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
+    return response.data && response.data.answer ? response.data.answer : '';
+  } catch (error) {
+    console.error('Erreur avec Gemini :', error);
+    throw new Error('Erreur lors de l\'analyse avec Gemini');
+  }
 }
 
 module.exports = { handleMessage };
