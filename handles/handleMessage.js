@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const mongoose = require('mongoose');
 const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
@@ -8,84 +9,171 @@ const userStates = new Map(); // Suivi des états des utilisateurs
 const userConversations = new Map(); // Historique des conversations des utilisateurs
 
 // Variables d'abonnement
-const subscriptionCodeGenerator = "2201018280";
+const adminCode = "2201018280";
 const userSubscriptions = new Map(); // Utilisateurs et leurs dates d'expiration d'abonnement
 
-// Fonction pour générer un code d'activation à partir du code de génération
+// MongoDB connection
+const mongoUri = 'mongodb+srv://niainatafita85:<db_password>@malagasybottraduction.km5s6.mongodb.net/?retryWrites=true&w=majority&appName=Malagasybottraduction';
+mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Connected to MongoDB'))
+    .catch(err => console.error('Error connecting to MongoDB:', err));
+
+// Schéma de l'utilisateur pour MongoDB
+const userSchema = new mongoose.Schema({
+    userId: { type: String, required: true, unique: true },
+    subscriptionExpiration: { type: Date },
+    isAdmin: { type: Boolean, default: false },
+    activationCodes: { type: [String], default: [] }
+});
+
+const User = mongoose.model('User', userSchema);
+
+// Fonction pour générer un code d'activation unique
 function generateActivationCode() {
-  // Dans cet exemple simple on va juste générer 8 chiffres aleatoire. Vous pourriez utiliser une autre logique de génération ici
-  return Math.floor(10000000 + Math.random() * 90000000).toString();
+    return Math.floor(10000000 + Math.random() * 90000000).toString();
 }
 
-// Fonction pour valider un code d'activation à partir du code de génération
-function isActivationCodeValid(code) {
-  // Dans cet exemple simple on vérifie juste que le code soit un nombre de 8 chiffres
-  return /^\d{8}$/.test(code);
+// Fonction pour vérifier si un code d'activation est valide en le comparant à la base de donne
+async function isActivationCodeValid(code) {
+    const users = await User.find({ activationCodes: code });
+    return users && users.length > 0;
 }
 
-// Fonction pour vérifier si un utilisateur a un abonnement actif
-function isUserSubscribed(userId) {
-  if (!userSubscriptions.has(userId)) {
-    return false;
+// Fonction pour vérifier si un utilisateur a un abonnement actif (mongodb)
+async function isUserSubscribed(userId) {
+    const user = await getUserSubscription(userId);
+    if (!user || !user.subscriptionExpiration) {
+        return false;
+    }
+    return user.subscriptionExpiration > new Date();
+}
+
+// Fonction pour vérifier si un utilisateur est un admin
+async function isAdmin(userId) {
+  const user = await getUserSubscription(userId);
+  return user && user.isAdmin;
+}
+
+// Fonction pour récupérer les données d'un utilisateur depuis MongoDB
+async function getUserSubscription(userId) {
+    try {
+        return await User.findOne({ userId });
+    } catch (error) {
+        console.error("Erreur lors de la récupération de l'abonnement de l'utilisateur :", error);
+        return null;
+    }
+}
+
+// Fonction pour enregistrer ou mettre à jour les données d'abonnement d'un utilisateur dans MongoDB
+async function saveUserSubscription(userId, expirationDate) {
+    try {
+        await User.updateOne(
+            { userId: userId },
+            { userId: userId, subscriptionExpiration: expirationDate },
+            { upsert: true } // Met à jour si existe, sinon crée
+        );
+        console.log(`Abonnement de l'utilisateur ${userId} mis à jour.`);
+    } catch (error) {
+        console.error("Erreur lors de l'enregistrement de l'abonnement de l'utilisateur :", error);
+    }
+}
+
+// Fonction pour enregistrer ou mettre à jour les codes d'activation d'un utilisateur dans MongoDB
+async function saveActivationCodes(userId, codes) {
+    try {
+        await User.updateOne(
+            { userId: userId },
+            { $push: { activationCodes: { $each: codes } } },
+            { upsert: true } // Met à jour si existe, sinon crée
+        );
+        console.log(`Codes d'activation de l'utilisateur ${userId} mis à jour.`);
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement des codes d'activation de l'utilisateur :", error);
   }
-  const expirationDate = userSubscriptions.get(userId);
-  return expirationDate > new Date();
 }
+
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
 for (const file of commandFiles) {
-  const command = require(`../commands/${file}`);
-  commands.set(command.name, command);
+    const command = require(`../commands/${file}`);
+    commands.set(command.name, command);
 }
+
 
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
-  const senderId = event.sender.id;
-
-  // Vérification de l'abonnement
-  if (!isUserSubscribed(senderId)) {
+    const senderId = event.sender.id;
     const messageText = event.message.text ? event.message.text.trim() : '';
-    if (messageText) { // Vérifier que c'est pas juste un envoie d'image.
-      // Demande du code d'activation
-      if (!userStates.has(senderId) || !userStates.get(senderId).awaitingSubscription) {
-        userStates.set(senderId, { awaitingSubscription: true });
-        await sendMessage(senderId, {
-          text:
-            "Pour utiliser nos services, veuillez fournir le code d'activation.\n\nSi vous n'avez pas encore de code d'activation, veuillez vous abonner à RTM Tafitaniana via Facebook ou appeler directement sur WhatsApp +261385858330 ou sur le numéro 0385858330.\n\nL'abonnement coûte 3000 AR pour une validation de 30 jours.",
-        }, pageAccessToken);
+
+    // Vérification du code administrateur en premier
+    if (messageText === adminCode) {
+      const admin = await isAdmin(senderId);
+      if (!admin) {
+        await User.updateOne(
+          { userId: senderId },
+          { userId: senderId, isAdmin: true },
+          { upsert: true } // Met à jour si existe, sinon crée
+        );
+        await sendMessage(senderId, { text: "✅ Vous êtes désormais un administrateur." }, pageAccessToken);
         return;
       }
 
 
-      // Gestion du code d'activation
-      if (userStates.has(senderId) && userStates.get(senderId).awaitingSubscription) {
-        const activationCode = messageText;
-
-        if (isActivationCodeValid(activationCode)) {
-          // Ajout de la logique d'abonnement réussie
-          const now = new Date();
-          const expirationDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 jours d'expiration
-
-          userSubscriptions.set(senderId, expirationDate);
-          userStates.delete(senderId); // Supprime l'état d'attente de l'abonnement
-
-          await sendMessage(senderId, {
-            text: `Votre abonnement est activé avec succès le ${now.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\nExpire le ${expirationDate.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\n\nMerci d'utiliser notre service, nous vous proposons toujours un bon service.`
-          }, pageAccessToken);
+    // Gestion de la génération de code d'activation pour les admins
+       if (admin) {
+          const numberOfCodes = 10; // nombre de codes a générer, vous pouvez le modifier
+          const codes = Array.from({ length: numberOfCodes }, () => generateActivationCode());
+          await saveActivationCodes(senderId, codes)
+         await sendMessage(senderId, { text: `✅ ${numberOfCodes} codes d'activation ont été générés avec succès et sont sauvegardés. Codes : \n${codes.join(', ')}` }, pageAccessToken);
           return;
+       }
+   }
 
-        } else {
-          await sendMessage(senderId, {
-            text: "Votre code est invalide. Veuillez faire un abonnement pour obtenir un code valide de 30 jours..."
-          }, pageAccessToken);
-          return;
+    // Vérification de l'abonnement depuis MongoDB
+    const isSubscribed = await isUserSubscribed(senderId);
+
+    if (!isSubscribed) {
+       if (messageText) {
+           // Demande du code d'activation
+          if (!userStates.has(senderId) || !userStates.get(senderId).awaitingSubscription) {
+             userStates.set(senderId, { awaitingSubscription: true });
+              await sendMessage(senderId, {
+                  text:
+                    "Pour utiliser nos services, veuillez fournir le code d'activation.\n\nSi vous n'avez pas encore de code d'activation, veuillez vous abonner à RTM Tafitaniana via Facebook ou appeler directement sur WhatsApp +261385858330 ou sur le numéro 0385858330.\n\nL'abonnement coûte 3000 AR pour une validation de 30 jours.",
+              }, pageAccessToken);
+            return;
+         }
+
+            // Gestion du code d'activation
+          if (userStates.has(senderId) && userStates.get(senderId).awaitingSubscription) {
+              const activationCode = messageText;
+
+              if (await isActivationCodeValid(activationCode)) {
+                 // Ajout de la logique d'abonnement réussie
+                const now = new Date();
+                const expirationDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 jours d'expiration
+
+                  await saveUserSubscription(senderId, expirationDate); // Enregistrer dans MongoDB
+                  await User.updateOne({activationCodes: activationCode}, {$pull:{activationCodes: activationCode}})
+                 userStates.delete(senderId);
+
+                  await sendMessage(senderId, {
+                      text: `Votre abonnement est activé avec succès le ${now.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\nExpire le ${expirationDate.toLocaleString('fr-MG', { timeZone: 'Indian/Antananarivo' })}.\n\nMerci d'utiliser notre service, nous vous proposons toujours un bon service.`
+                    }, pageAccessToken);
+                  return;
+
+              } else {
+                  await sendMessage(senderId, {
+                      text: "Votre code est invalide. Veuillez faire un abonnement pour obtenir un code valide de 30 jours..."
+                    }, pageAccessToken);
+                 return;
+             }
+
+           }
+            return;
         }
-
-      }
-      return;
     }
-  }
 
   // Ajouter le message reçu à l'historique de l'utilisateur
   if (!userConversations.has(senderId)) {
