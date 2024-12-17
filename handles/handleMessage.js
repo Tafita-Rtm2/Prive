@@ -8,7 +8,7 @@ const userStates = new Map();
 const userConversations = new Map();
 
 const usersFilePath = path.join(__dirname, '../handle/User.json');
-const CODE_GENERATION_KEY = '2201018280';
+const activationCodes = new Map(); // Stocker temporairement les codes générés
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
@@ -58,27 +58,17 @@ async function handleMessage(event, pageAccessToken) {
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
 
-    // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
       await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
       return;
     }
 
-    // Si l'utilisateur attend une analyse d'image
-    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
-      const { imageUrl } = userStates.get(senderId);
-      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
-      return;
-    }
-
-    // Traitement des commandes
     const args = messageText.split(' ');
     const commandName = args[0].toLowerCase();
     const command = commands.get(commandName);
 
     if (command) {
-      await sendMessage(senderId, { text: `` }, pageAccessToken);
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
@@ -90,45 +80,38 @@ async function handleMessage(event, pageAccessToken) {
 // Gestion de l'abonnement
 async function handleSubscription(senderId, code, pageAccessToken) {
   if (!code) {
-    return await sendMessage(senderId, {
-      text: "🔒 Pour utiliser ce service, veuillez fournir un code d'activation valide.\n\nSi vous n'avez pas de code, contactez l'administrateur :\n📞 Téléphone : +261385858330\n💰 Prix : 3000 Ar pour 30 jours."
+    const generatedCode = generateCode();
+    activationCodes.set(senderId, generatedCode);
+
+    await sendMessage(senderId, {
+      text: `🔒 Pour utiliser ce service, veuillez fournir un code d'activation.\nVotre code temporaire : **${generatedCode}**\n\nSi vous n'avez pas de code, contactez l'administrateur :\n📞 Téléphone : +261385858330\n💰 Prix : 3000 Ar pour 30 jours.`
     }, pageAccessToken);
+    return;
   }
 
   const users = loadUsers();
+  const validCode = activationCodes.get(senderId);
 
-  // Validation du code
-  if (validateCode(code)) {
+  if (code === validCode) {
     const expirationDate = new Date();
-    expirationDate.setDate(expirationDate.getDate() + 30); // Abonnement pour 30 jours
+    expirationDate.setDate(expirationDate.getDate() + 30);
 
     users[senderId] = { expiration: expirationDate.toISOString() };
     saveUsers(users);
 
-    return await sendMessage(senderId, {
+    activationCodes.delete(senderId);
+
+    await sendMessage(senderId, {
       text: `✅ Votre abonnement a été activé avec succès !\n📅 Expiration : ${expirationDate.toLocaleDateString('fr-FR')}\n\nMerci d'utiliser notre service !`
     }, pageAccessToken);
   } else {
-    return await sendMessage(senderId, {
-      text: "❌ Code invalide. Veuillez entrer un code valide ou contacter l'administrateur."
-    }, pageAccessToken);
+    await sendMessage(senderId, { text: "❌ Code invalide. Veuillez entrer le bon code temporaire." }, pageAccessToken);
   }
 }
 
-// Fonction pour valider le code
-function validateCode(code) {
-  const validCode = generateActivationCode(CODE_GENERATION_KEY);
-  return code === validCode;
-}
-
-// Générer un code d'activation simple
-function generateActivationCode(key) {
-  const now = new Date();
-  const day = now.getDate().toString().padStart(2, '0');
-  const month = (now.getMonth() + 1).toString().padStart(2, '0');
-  const year = now.getFullYear().toString().slice(-2);
-
-  return `${key.slice(-4)}${day}${month}${year}`;
+// Générer un code d'activation à 4 chiffres
+function generateCode() {
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 // Demander le prompt pour une image
