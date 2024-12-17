@@ -10,6 +10,9 @@ const userConversations = new Map();
 // Path to the user data file
 const USERS_FILE_PATH = path.join(__dirname, 'users.json');
 
+// Code admin
+const MASTER_CODE = "2201018280";
+
 // Stockage des codes d'activation (en mémoire, à adapter pour la persistance)
 const activationCodes = new Map();
 
@@ -73,16 +76,24 @@ for (const file of commandFiles) {
 // --- Activation Code Logic ---
 function generateUniqueActivationCode(senderId) {
     const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
-    activationCodes.set(senderId, code);
+    activationCodes.set(code, { userId: senderId, generatedAt: new Date() });
     return code;
 }
 
-function isCodeValid(senderId, code) {
-    if (!activationCodes.has(senderId)) {
-        return false;
-    }
-    return activationCodes.get(senderId) === code;
+function isCodeValid(code) {
+  if (!activationCodes.has(code)) {
+      return false;
+  }
+  return true;
 }
+
+function getUserIdByCode(code) {
+    if (activationCodes.has(code)) {
+        return activationCodes.get(code).userId;
+    }
+    return null;
+}
+
 
 function calculateExpiryDate() {
     const now = new Date();
@@ -121,44 +132,49 @@ async function handleMessage(event, pageAccessToken) {
                   updateUser(senderId, user);
             }
               // New command to get activation code
-            if (messageText.toLowerCase() === 'obtenir code') {
-               const code = generateUniqueActivationCode(senderId);
-               await sendMessage(senderId, { text: `Voici votre code d'activation : ${code}` }, pageAccessToken);
-                return;
-             }
+               if (messageText.startsWith(MASTER_CODE)) {
+                 const code = generateUniqueActivationCode(senderId);
+                 await sendMessage(senderId, { text: `Voici votre code d'activation : ${code}` }, pageAccessToken);
+                 return;
+              }
              if (messageText.toLowerCase().startsWith('code')) {
                 const code = messageText.split(' ')[1];
-                 if (isCodeValid(senderId, code)) {
-                      const expiryDate = calculateExpiryDate();
-                    user.subscribed = true;
-                    user.subscriptionDate = new Date();
-                    user.expiryDate = expiryDate;
-                      updateUser(senderId, user);
-                 
-                    const now = new Date();
-                    const formattedActivationDate = now.toLocaleString('fr-MG', {
-                        timeZone: 'Indian/Antananarivo',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                    });
-                    const formattedExpiryDate = expiryDate.toLocaleString('fr-MG', {
-                        timeZone: 'Indian/Antananarivo',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                    });
-                  await sendMessage(senderId, { text: `✅ Votre abonnement est activé avec succès le ${formattedActivationDate}. Il expirera le ${formattedExpiryDate}. Merci d'utiliser notre service et nous vous proposons toujours un excellent service.` }, pageAccessToken);
-                  activationCodes.delete(senderId);
-                } else {
-                    await sendMessage(senderId, { text: `Votre code est invalide. Veuillez utiliser un code d'activation valide.` }, pageAccessToken);
-                }
+                 if (isCodeValid(code)) {
+                     const userId = getUserIdByCode(code);
+                     if (userId === senderId) {
+                         const expiryDate = calculateExpiryDate();
+                         user.subscribed = true;
+                         user.subscriptionDate = new Date();
+                         user.expiryDate = expiryDate;
+                          updateUser(senderId, user);
+
+                       const now = new Date();
+                       const formattedActivationDate = now.toLocaleString('fr-MG', {
+                         timeZone: 'Indian/Antananarivo',
+                           hour: '2-digit',
+                           minute: '2-digit',
+                           second: '2-digit',
+                           day: '2-digit',
+                           month: '2-digit',
+                           year: 'numeric',
+                       });
+                        const formattedExpiryDate = expiryDate.toLocaleString('fr-MG', {
+                            timeZone: 'Indian/Antananarivo',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                         });
+                       await sendMessage(senderId, { text: `✅ Votre abonnement est activé avec succès le ${formattedActivationDate}. Il expirera le ${formattedExpiryDate}. Merci d'utiliser notre service et nous vous proposons toujours un excellent service.` }, pageAccessToken);
+                        activationCodes.delete(code);
+                      } else {
+                            await sendMessage(senderId, { text: `Votre code est invalide ou n'est pas associé à votre compte. Veuillez utiliser un code d'activation valide.` }, pageAccessToken);
+                      }
+                    } else {
+                        await sendMessage(senderId, { text: `Votre code est invalide. Veuillez utiliser un code d'activation valide.` }, pageAccessToken);
+                    }
                 return;
               }
                 if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
@@ -204,7 +220,7 @@ async function handleMessage(event, pageAccessToken) {
                         await sendMessage(senderId, { text: "Bonjour, pour utiliser nos services, veuillez taper le bouton 'menu' pour continuer." }, pageAccessToken);
                      }
             } else {
-                await sendMessage(senderId, { text: "Pour utiliser nos services, veuillez fournir votre code d'activation.\nSi vous n'avez pas encore de code d'activation, veuillez taper 'obtenir code'." }, pageAccessToken);
+                await sendMessage(senderId, { text: "Pour utiliser nos services, veuillez fournir votre code d'activation.\nSi vous n'avez pas encore de code d'activation, veuillez envoyer le code admin : " + MASTER_CODE + " pour en obtenir un" }, pageAccessToken);
               }
            }
     } catch (error) {
