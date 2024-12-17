@@ -13,7 +13,7 @@ const adminCode = "2201018280";
 const userSubscriptions = new Map(); // Utilisateurs et leurs dates d'expiration d'abonnement
 
 // MongoDB connection
-const mongoUri = 'mongodb+srv://niainatafita85:<Tafitaniaina1206>@malagasybottraduction.km5s6.mongodb.net/?retryWrites=true&w=majority&appName=Malagasybottraduction';
+const mongoUri = 'mongodb+srv://niainatafita85:Tafitaniaina1206@malagasybottraduction.km5s6.mongodb.net/?retryWrites=true&w=majority&appName=Malagasybottraduction';
 mongoose.connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })
     .then(() => console.log('Connected to MongoDB'))
     .catch(err => console.error('Error connecting to MongoDB:', err));
