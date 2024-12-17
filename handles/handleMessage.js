@@ -10,11 +10,15 @@ const userConversations = new Map();
 // Path to the user data file
 const USERS_FILE_PATH = path.join(__dirname, 'users.json');
 
+// Stockage des codes d'activation (en mémoire, à adapter pour la persistance)
+const activationCodes = new Map();
+
 // --- Helper Functions ---
 function log(message, level = 'info') {
     const timestamp = new Date().toISOString();
     console[level](`[${timestamp}] [MessageHandler] ${message}`);
 }
+
 function loadUsers() {
     try {
         const data = fs.readFileSync(USERS_FILE_PATH, 'utf-8');
@@ -28,7 +32,7 @@ function loadUsers() {
 function saveUsers(users) {
     try {
         fs.writeFileSync(USERS_FILE_PATH, JSON.stringify(users, null, 2), 'utf-8');
-         log(`Users data saved successfully.`);
+        log(`Users data saved successfully.`);
     } catch (error) {
         log(`Error saving users: ${error.message}`, 'error');
     }
@@ -47,7 +51,7 @@ function updateUser(senderId, userData) {
 
 function isUserSubscribed(senderId) {
     const user = getUser(senderId);
-      if (user && user.subscribed) {
+    if (user && user.subscribed) {
         return user.expiryDate > new Date();
     }
     return false;
@@ -67,21 +71,17 @@ for (const file of commandFiles) {
 }
 
 // --- Activation Code Logic ---
-function generateActivationCode(baseCode) {
+function generateUniqueActivationCode(senderId) {
     const code = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    activationCodes.set(senderId, code);
     return code;
 }
-const activationBaseCode = '2201018280';
 
-function isCodeValid(code) {
-    try {
-        const generatedCode = generateActivationCode(activationBaseCode)
-        return code === generatedCode;
-    }
-    catch (error) {
-        log(`Error isCodeValid: ${error.message}`, 'error');
+function isCodeValid(senderId, code) {
+    if (!activationCodes.has(senderId)) {
         return false;
     }
+    return activationCodes.get(senderId) === code;
 }
 
 function calculateExpiryDate() {
@@ -89,7 +89,6 @@ function calculateExpiryDate() {
     now.setDate(now.getDate() + 30); // Add 30 days
     return now;
 }
-
 
 // --- Main Message Handler ---
 async function handleMessage(event, pageAccessToken) {
@@ -121,10 +120,15 @@ async function handleMessage(event, pageAccessToken) {
                   user = { senderId, name: 'User', subscribed: false };
                   updateUser(senderId, user);
             }
-
+              // New command to get activation code
+            if (messageText.toLowerCase() === 'obtenir code') {
+               const code = generateUniqueActivationCode(senderId);
+               await sendMessage(senderId, { text: `Voici votre code d'activation : ${code}` }, pageAccessToken);
+                return;
+             }
              if (messageText.toLowerCase().startsWith('code')) {
                 const code = messageText.split(' ')[1];
-                 if (isCodeValid(code)) {
+                 if (isCodeValid(senderId, code)) {
                       const expiryDate = calculateExpiryDate();
                     user.subscribed = true;
                     user.subscriptionDate = new Date();
@@ -150,22 +154,21 @@ async function handleMessage(event, pageAccessToken) {
                         month: '2-digit',
                         year: 'numeric',
                     });
-                  await sendMessage(senderId, { text: `✅ Your subscription has been successfully activated on ${formattedActivationDate}. It will expire on ${formattedExpiryDate}. Thank you for using our service, and we always offer you excellent service.` }, pageAccessToken);
+                  await sendMessage(senderId, { text: `✅ Votre abonnement est activé avec succès le ${formattedActivationDate}. Il expirera le ${formattedExpiryDate}. Merci d'utiliser notre service et nous vous proposons toujours un excellent service.` }, pageAccessToken);
+                  activationCodes.delete(senderId);
                 } else {
-                    await sendMessage(senderId, { text: `Your code is invalid. Please subscribe to get a valid 30-day code.` }, pageAccessToken);
+                    await sendMessage(senderId, { text: `Votre code est invalide. Veuillez utiliser un code d'activation valide.` }, pageAccessToken);
                 }
                 return;
               }
-
-
-             if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+                if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
                    const args = messageText.split(' ');
                     const commandName = args[0].toLowerCase();
                    const command = commands.get(commandName);
 
                     if (command) {
                          userStates.delete(senderId); // Exit image mode
-                         await sendMessage(senderId, { text: `🔓 Image mode has been exited. Executing command '${commandName}'.` }, pageAccessToken);
+                         await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
                          return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
                    }
                   const { imageUrl } = userStates.get(senderId);
@@ -198,10 +201,10 @@ async function handleMessage(event, pageAccessToken) {
                          }
                     }
                     else {
-                        await sendMessage(senderId, { text: "Hello, to use our service, please type the 'menu' button to continue." }, pageAccessToken);
+                        await sendMessage(senderId, { text: "Bonjour, pour utiliser nos services, veuillez taper le bouton 'menu' pour continuer." }, pageAccessToken);
                      }
             } else {
-                await sendMessage(senderId, { text: "To use our services, please provide your activation code.\nIf you do not yet have an activation code, please subscribe to RTM Tafitaniana via Facebook or call him directly on WhatsApp +261385858330 or on the number 0385858330. If you have subscribed, RTM Tafitaniana will give you a 30-day activation code." }, pageAccessToken);
+                await sendMessage(senderId, { text: "Pour utiliser nos services, veuillez fournir votre code d'activation.\nSi vous n'avez pas encore de code d'activation, veuillez taper 'obtenir code'." }, pageAccessToken);
               }
            }
     } catch (error) {
@@ -212,12 +215,12 @@ async function handleMessage(event, pageAccessToken) {
 // --- Image Analysis ---
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
     userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-    await sendMessage(senderId, { text: "📷 Image received. What do you want me to do with this image? Ask all your questions! 📸😊." }, pageAccessToken);
+    await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? Posez toutes vos questions ! 📸😊." }, pageAccessToken);
 }
 
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
     try {
-        await sendMessage(senderId, { text: "🔍 I'm processing your request regarding the image. Please wait a moment... 🤔⏳" }, pageAccessToken);
+        await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Veuillez patienter un instant... 🤔⏳" }, pageAccessToken);
 
         let imageAnalysis;
         const lockedCommand = userStates.get(senderId)?.lockedCommand;
@@ -233,14 +236,14 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
 
 
         if (imageAnalysis) {
-            await sendMessage(senderId, { text: `📄 Here's the answer to your question regarding the image:\n${imageAnalysis}` }, pageAccessToken);
+            await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
        } else {
-            await sendMessage(senderId, { text: "❌ No usable information was detected in this image." }, pageAccessToken);
+            await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
         }
         userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
     } catch (error) {
       log(`Error during image analysis for ${senderId}: ${error.message}`, 'error');
-        await sendMessage(senderId, { text: "⚠️ An error occurred while analyzing the image." }, pageAccessToken);
+        await sendMessage(senderId, { text: "⚠️ Une erreur est survenue lors de l'analyse de l'image." }, pageAccessToken);
     }
 }
 
