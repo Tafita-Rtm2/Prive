@@ -1,68 +1,55 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gpt4o-pro',
-  description: 'Analyse une image ou répond à une question via l’API Kaiz.',
-  author: 'Kaiz Integration',
+  name: 'gpt-4o',
+  description: 'Pose une question à GPT-4o via l’API fournie.',
+  author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
     const prompt = args.join(' ');
 
-    // Vérifier si un prompt valide est fourni
     if (!prompt) {
       return sendMessage(
         senderId,
-        { text: "─────★─────\n✨Gpt4o pro\n👋 Merci de me choisir comme répondeur automatique ! ♊ Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────." },
+        {
+          text: "─────★─────\n✨GPT-4o\n👋 Merci de me choisir comme répondeur automatique ! 🤖 Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────.",
+        },
         pageAccessToken
       );
     }
 
     try {
-      let apiUrl;
-      let isImageAnalysis = false;
+      // Informer l'utilisateur que la réponse est en cours
+      await sendMessage(
+        senderId,
+        { text: '💬 GPT-4o est en train de répondre⏳...\n\n─────★─────' },
+        pageAccessToken
+      );
 
-      // Déterminer le type de requête (analyse d'image ou question texte)
-      if (prompt.startsWith('http://') || prompt.startsWith('https://')) {
-        isImageAnalysis = true;
-        const imageUrl = prompt;
+      // Construire l'URL de l'API
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o?q=${encodeURIComponent(
+        prompt
+      )}&uid=${encodeURIComponent(senderId)}`;
 
-        // Construire l'URL pour l'analyse d'image
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?imageUrl=${encodeURIComponent(imageUrl)}&uid=${encodeURIComponent(senderId)}`;
-
-        // Informer l'utilisateur que l'analyse de l'image est en cours
-        await sendMessage(
-          senderId,
-          { text: '📷 Analyse de votre image en cours⏳...\n─────★─────' },
-          pageAccessToken
-        );
-      } else {
-        // Construire l'URL pour une question texte
-        apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(prompt)}&uid=${encodeURIComponent(senderId)}`;
-
-        // Informer l'utilisateur que la réponse est en cours de génération
-        await sendMessage(
-          senderId,
-          { text: '💬 Gpt4o pro est en train de répondre⏳...\n\n─────★─────' },
-          pageAccessToken
-        );
-      }
-
-      // Appel à l'API Kaiz
+      // Appel à l'API
       const response = await axios.get(apiUrl);
 
-      // Vérifier si la réponse est valide
-      const text = response.data?.response || "Désolé, je n'ai pas pu obtenir une réponse valide.";
+      // Vérifier si l'API retourne une réponse valide
+      const text = response.data?.response?.trim();
+      if (!text) {
+        throw new Error('Réponse invalide de l’API.');
+      }
 
-      // Obtenir la date et l'heure actuelle de Madagascar
+      // Obtenir l'heure de Madagascar
       const madagascarTime = getMadagascarTime();
 
-      // Formater la réponse finale
+      // Formater la réponse correctement
       const formattedResponse = `─────★─────\n` +
-                                `✨Gpt4o pro\n\n${text}\n` +
+                                `✨GPT-4o\n\n${text}\n` +
                                 `─────★─────\n` +
                                 `🕒 ${madagascarTime}`;
 
-      // Gérer les réponses longues (découper en morceaux si nécessaire)
+      // Gérer les réponses longues
       const maxMessageLength = 2000;
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
@@ -73,37 +60,16 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error('Erreur lors de l\'appel à l\'API Kaiz :', error);
+      console.error("Erreur lors de l'appel à l'API GPT-4o :", error);
 
-      // Envoyer un message d'erreur si l'appel API échoue
+      // Envoyer un message d'erreur en cas de problème
       await sendMessage(
         senderId,
         { text: '❌ Une erreur est survenue. Veuillez réessayer plus tard.' },
         pageAccessToken
       );
     }
-  }
-};
-
-// Fonction pour envoyer un message via l'API Messenger
-const sendMessage = async (senderId, messageData, pageAccessToken) => {
-  try {
-    if (!senderId || !messageData || !pageAccessToken) {
-      throw new Error('Paramètres invalides pour sendMessage');
-    }
-
-    const url = `https://graph.facebook.com/v12.0/me/messages?access_token=${pageAccessToken}`;
-    const payload = {
-      recipient: { id: senderId },
-      message: messageData,
-    };
-
-    const response = await axios.post(url, payload);
-    console.log('Message envoyé avec succès :', response.data);
-  } catch (error) {
-    console.error('Erreur lors de l\'envoi du message :', error.message || error);
-    throw new Error('Échec de l\'envoi du message.');
-  }
+  },
 };
 
 // Fonction pour obtenir l'heure et la date de Madagascar
@@ -119,7 +85,7 @@ function getMadagascarTime() {
     minute: '2-digit',
     second: '2-digit',
   });
-  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:30:45"
+  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:40:45"
 }
 
 // Fonction utilitaire pour découper un message en morceaux
