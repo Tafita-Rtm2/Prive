@@ -109,7 +109,17 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
     }
 
     if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
+      const formattedResponse = `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}`;
+      const maxMessageLength = 2000;
+      
+      if (formattedResponse.length > maxMessageLength) {
+        const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
+        for (const message of messages) {
+          await sendMessage(senderId, { text: message }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
+      }
     } else {
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
@@ -132,6 +142,15 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
     console.error('Erreur avec Gemini :', error);
     throw new Error('Erreur lors de l\'analyse avec Gemini');
   }
+}
+
+// Fonction utilitaire pour découper un message en morceaux
+function splitMessageIntoChunks(message, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += chunkSize) {
+    chunks.push(message.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 
 module.exports = { handleMessage };
