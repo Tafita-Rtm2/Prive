@@ -4,8 +4,8 @@ const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
 // Modules pour la gestion des abonnements
-const moment = require('moment-timezone');
-const usersFilePath = path.join(__dirname, '../users.json');
+const moment = require('moment');
+const usersFilePath = path.join(__dirname, '../handle/users.json'); // Chemin ajusté
 
 const commands = new Map();
 const userStates = new Map();
@@ -44,11 +44,11 @@ async function handleMessage(event, pageAccessToken) {
 
         if (validActivationCodes.includes(messageText)) {
             // Code d'activation correct
-            const expirationDate = moment().tz('Africa/Nairobi').add(30, 'days').format();
+            const expirationDate = moment().add(30, 'days').format();
             usersData.users.push({ user_id: senderId, expiration_date: expirationDate });
             saveUsersData(usersData);
             await sendMessage(senderId, {
-                 text: `✅ Votre abonnement de 30 jours est activé avec succès! 🎉 Votre abonnement est valide jusqu'au ${moment(expirationDate).tz('Africa/Nairobi').format('DD/MM/YYYY HH:mm:ss')} (Heure de Madagascar). 🇲🇬` 
+                 text: `✅ Votre abonnement de 30 jours est activé avec succès! 🎉 Votre abonnement est valide jusqu'au ${moment(expirationDate).format('DD/MM/YYYY HH:mm:ss')} (Heure locale). 🇲🇬` 
                 }, pageAccessToken);
             
             return;
