@@ -5,7 +5,7 @@ const { sendMessage } = require('./sendMessage');
 
 // Modules pour la gestion des abonnements
 const moment = require('moment');
-const usersFilePath = path.join(__dirname, '../handle/users.json'); // Chemin ajusté
+const usersFilePath = path.join(__dirname, '../handles/users.json'); // Chemin ajusté
 
 const commands = new Map();
 const userStates = new Map();
