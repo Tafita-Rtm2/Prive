@@ -24,10 +24,30 @@ async function handleMessage(event, pageAccessToken) {
   }
   userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
 
+  // Gestion des images
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
+
+    // Si une commande est verrouillée, elle gère l'analyse de l'image
+    const lockedCommand = userStates.get(senderId)?.lockedCommand;
+    if (lockedCommand && commands.has(lockedCommand)) {
+      const lockedCommandInstance = commands.get(lockedCommand);
+
+      if (lockedCommandInstance && lockedCommandInstance.analyzeImage) {
+        await lockedCommandInstance.analyzeImage(senderId, imageUrl, pageAccessToken, sendMessage);
+      } else {
+        await sendMessage(senderId, { text: "❌ La commande verrouillée ne prend pas en charge l'analyse d'images." }, pageAccessToken);
+      }
+      return;
+    }
+
+    // Demander à l'utilisateur un prompt pour l'image
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
-  } else if (event.message.text) {
+    return;
+  }
+
+  // Gestion des messages texte
+  if (event.message.text) {
     const messageText = event.message.text.trim();
 
     // Commande "stop" pour quitter le mode actuel
@@ -63,11 +83,12 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          // Ligne supprimée ici pour éviter l'affichage
+          // Ignorer les commandes si une autre est verrouillée
         }
       } else {
         await sendMessage(senderId, { text: `` }, pageAccessToken);
       }
+
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
@@ -76,11 +97,12 @@ async function handleMessage(event, pageAccessToken) {
     if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
       const lockedCommand = userStates.get(senderId).lockedCommand;
       const lockedCommandInstance = commands.get(lockedCommand);
+
       if (lockedCommandInstance) {
         return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
       }
     } else {
-      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer ." }, pageAccessToken);
+      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer." }, pageAccessToken);
     }
   }
 }
@@ -101,6 +123,7 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
 
     if (lockedCommand && commands.has(lockedCommand)) {
       const lockedCommandInstance = commands.get(lockedCommand);
+
       if (lockedCommandInstance && lockedCommandInstance.analyzeImage) {
         imageAnalysis = await lockedCommandInstance.analyzeImage(imageUrl, prompt);
       }
@@ -124,7 +147,6 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
 // Fonction pour appeler l'API Gemini pour analyser une image avec un prompt
 async function analyzeImageWithGemini(imageUrl, prompt) {
   const geminiApiEndpoint = 'https://sandipbaruwal.onrender.com/gemini2';
-
   try {
     const response = await axios.get(`${geminiApiEndpoint}?url=${encodeURIComponent(imageUrl)}&prompt=${encodeURIComponent(prompt)}`);
     return response.data && response.data.answer ? response.data.answer : '';
