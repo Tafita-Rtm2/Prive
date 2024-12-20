@@ -7,7 +7,7 @@ const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userConversations = new Map(); // Historique des conversations des utilisateurs
 const userSubscriptions = new Map(); // Gestion des abonnements utilisateurs
-const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes d'abonnement valides
+const validCodes = ["2201", "1208", "0612", "1212", "2003"]; // Codes d'abonnement valides
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
 
 // Charger les commandes
@@ -42,9 +42,9 @@ async function handleMessage(event, pageAccessToken) {
     const messageText = event.message.text.trim();
 
     // Commande "stop" pour quitter le mode actuel
-    if (messageText.toLowerCase() === 'stop') {
+    if (messageText.toLowerCase() === 'menu') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
+      await sendMessage(senderId, { text: "" }, pageAccessToken);
       return;
     }
 
@@ -61,12 +61,26 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
+      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+        const previousCommand = userStates.get(senderId).lockedCommand;
+        if (previousCommand !== commandName) {
+          await sendMessage(senderId, {
+            text: ''
+          }, pageAccessToken);
+        }
+      } else {
+        await sendMessage(senderId, {
+          text: ``
+        }, pageAccessToken);
+      }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
     // Réponse par défaut si la commande est inconnue
-    await sendMessage(senderId, { text: "Commande non reconnue. Tapez 'help' pour voir la liste des commandes disponibles." }, pageAccessToken);
+    await sendMessage(senderId, {
+      text: "mila misafidy comande alo ianao vao afaka mametraka fanotaniana ka . Tapez 'Menu' pour voir la liste des commandes disponibles."
+    }, pageAccessToken);
   }
 }
 
@@ -148,15 +162,6 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
   }
 }
 
-// Fonction pour vérifier l'abonnement de l'utilisateur
-function checkSubscription(senderId) {
-  const expirationDate = userSubscriptions.get(senderId);
-  if (!expirationDate) return false; // Pas d'abonnement
-  if (Date.now() < expirationDate) return true; // Abonnement encore valide
-  userSubscriptions.delete(senderId); // Supprimer l'abonnement expiré
-  return false;
-}
-
 // Fonction utilitaire pour découper un message en morceaux
 function splitMessageIntoChunks(message, chunkSize) {
   const chunks = [];
@@ -164,6 +169,15 @@ function splitMessageIntoChunks(message, chunkSize) {
     chunks.push(message.slice(i, i + chunkSize));
   }
   return chunks;
+}
+
+// Fonction pour vérifier l'abonnement de l'utilisateur
+function checkSubscription(senderId) {
+  const expirationDate = userSubscriptions.get(senderId);
+  if (!expirationDate) return false; // Pas d'abonnement
+  if (Date.now() < expirationDate) return true; // Abonnement encore valide
+  userSubscriptions.delete(senderId); // Supprimer l'abonnement expiré
+  return false;
 }
 
 module.exports = { handleMessage };
