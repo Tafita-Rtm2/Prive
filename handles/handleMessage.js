@@ -56,7 +56,7 @@ async function handleMessage(event, pageAccessToken) {
 
       if (command) {
         userStates.delete(senderId); // Quitter le mode image
-        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
+        await sendMessage(senderId, { text: `` }, pageAccessToken);
         return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
       }
 
