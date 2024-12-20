@@ -5,7 +5,8 @@ const { sendMessage } = require('./sendMessage');
 
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
-const userSubscriptions = new Map(); // Gestion des abonnements utilisateurs avec date d'expiration
+const userConversations = new Map(); // Historique des conversations des utilisateurs
+const userSubscriptions = new Map(); // Gestion des abonnements utilisateurs
 const validCodes = ["2201", "1206", "0612", "1212", "2003"]; // Codes d'abonnement valides
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
 
@@ -20,11 +21,16 @@ for (const file of commandFiles) {
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
 
+  // Ajouter le message reçu à l'historique de l'utilisateur
+  if (!userConversations.has(senderId)) {
+    userConversations.set(senderId, []);
+  }
+  userConversations.get(senderId).push({ type: 'user', text: event.message.text || 'Image' });
+
   // Vérifier si l'utilisateur est abonné
   const isSubscribed = checkSubscription(senderId);
 
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
-    // Gérer les images
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
