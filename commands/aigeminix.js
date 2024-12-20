@@ -1,7 +1,7 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'blackbox',
+  name: 'blackbox-ai',
   description: 'Pose une question à Blackbox via l’API fournie.',
   author: 'Votre nom',
 
