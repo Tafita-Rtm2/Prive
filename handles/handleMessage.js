@@ -30,22 +30,16 @@ async function handleMessage(event, pageAccessToken) {
   // Vérifier si l'utilisateur est abonné
   const isSubscribed = checkSubscription(senderId);
 
+  if (!isSubscribed) {
+    await handleSubscriptionFlow(senderId, event.message.text, pageAccessToken);
+    return;
+  }
+
   if (event.message.attachments && event.message.attachments[0].type === 'image') {
     const imageUrl = event.message.attachments[0].payload.url;
     await askForImagePrompt(senderId, imageUrl, pageAccessToken);
   } else if (event.message.text) {
     const messageText = event.message.text.trim();
-
-    // Validation d'un code d'abonnement
-    if (validCodes.includes(messageText)) {
-      const expirationDate = Date.now() + subscriptionDuration;
-      userSubscriptions.set(senderId, expirationDate);
-      console.log(`Abonnement activé pour l'utilisateur ${senderId}. Valide jusqu'au : ${new Date(expirationDate).toLocaleString()}`);
-      await sendMessage(senderId, {
-        text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
-      }, pageAccessToken);
-      return;
-    }
 
     // Commande "stop" pour quitter le mode actuel
     if (messageText.toLowerCase() === 'stop') {
@@ -56,16 +50,6 @@ async function handleMessage(event, pageAccessToken) {
 
     // Si l'utilisateur attend une analyse d'image et entre une commande
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
-      const args = messageText.split(' ');
-      const commandName = args[0].toLowerCase();
-      const command = commands.get(commandName);
-
-      if (command) {
-        userStates.delete(senderId); // Quitter le mode image
-        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
-        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
-      }
-
       const { imageUrl } = userStates.get(senderId);
       await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
@@ -77,29 +61,32 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
-      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-        const previousCommand = userStates.get(senderId).lockedCommand;
-        if (previousCommand !== commandName) {
-          // Ligne supprimée ici pour éviter l'affichage
-        }
-      } else {
-        await sendMessage(senderId, { text: `` }, pageAccessToken);
-      }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    // Si une commande est verrouillée, utiliser la commande verrouillée pour traiter la demande
-    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-      const lockedCommand = userStates.get(senderId).lockedCommand;
-      const lockedCommandInstance = commands.get(lockedCommand);
-      if (lockedCommandInstance) {
-        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
-      }
-    } else {
-      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer ." }, pageAccessToken);
-    }
+    // Réponse par défaut si la commande est inconnue
+    await sendMessage(senderId, { text: "Commande non reconnue. Tapez 'help' pour voir la liste des commandes disponibles." }, pageAccessToken);
   }
+}
+
+// Fonction pour gérer le flux d'abonnement
+async function handleSubscriptionFlow(senderId, messageText, pageAccessToken) {
+  // Si l'utilisateur envoie un code d'abonnement
+  if (validCodes.includes(messageText)) {
+    const expirationDate = Date.now() + subscriptionDuration;
+    userSubscriptions.set(senderId, expirationDate);
+    console.log(`Abonnement activé pour l'utilisateur ${senderId}. Valide jusqu'au : ${new Date(expirationDate).toLocaleString()}`);
+    await sendMessage(senderId, {
+      text: `✅ Félicitations ! Votre abonnement de 30 jours a été activé avec succès.`
+    }, pageAccessToken);
+    return;
+  }
+
+  // Si l'utilisateur envoie un message qui n'est pas un code valide
+  await sendMessage(senderId, {
+    text: `❌ Code incorrect. Veuillez faire un abonnement pour obtenir un code valide.`
+  }, pageAccessToken);
 }
 
 // Demander le prompt de l'utilisateur pour analyser l'image
@@ -168,6 +155,15 @@ function checkSubscription(senderId) {
   if (Date.now() < expirationDate) return true; // Abonnement encore valide
   userSubscriptions.delete(senderId); // Supprimer l'abonnement expiré
   return false;
+}
+
+// Fonction utilitaire pour découper un message en morceaux
+function splitMessageIntoChunks(message, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < message.length; i += chunkSize) {
+    chunks.push(message.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 
 module.exports = { handleMessage };
