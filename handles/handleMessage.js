@@ -1,3 +1,4 @@
+
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
@@ -12,66 +13,6 @@ const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(
 for (const file of commandFiles) {
   const command = require(`../commands/${file}`);
   commands.set(command.name, command);
-}
-
-// Liste des codes valides pour l'abonnement
-const validCodes = ['1208', '2201', '8280', '2003', '0612', '1212'];
-// Chemin vers le fichier JSON pour sauvegarder les abonnements
-const subscriptionsFilePath = path.join(__dirname, 'handles/subscriptions.json');
-
-// Charger les abonnements depuis le fichier JSON
-function loadSubscriptions() {
-  if (fs.existsSync(subscriptionsFilePath)) {
-    const data = fs.readFileSync(subscriptionsFilePath, 'utf8');
-    return JSON.parse(data);
-  }
-  return {};
-}
-
-// Sauvegarder les abonnements dans le fichier JSON
-function saveSubscriptions(subscriptions) {
-  fs.writeFileSync(subscriptionsFilePath, JSON.stringify(subscriptions, null, 2), 'utf8');
-}
-
-// Vérifier si l'utilisateur a un abonnement actif
-function isSubscriptionActive(senderId) {
-  const subscriptions = loadSubscriptions();
-  if (!subscriptions[senderId]) return false;
-
-  const expirationDate = new Date(subscriptions[senderId].expiresAt);
-  return new Date() <= expirationDate;
-}
-
-// Ajouter un abonnement pour un utilisateur
-function addSubscription(senderId, days = 30) {
-  const subscriptions = loadSubscriptions();
-  const now = new Date();
-  const expirationDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
-
-  subscriptions[senderId] = {
-    subscribedAt: now.toISOString(),
-    expiresAt: expirationDate.toISOString(),
-  };
-
-  saveSubscriptions(subscriptions);
-  return expirationDate;
-}
-
-// Valider les codes d'abonnement
-function isValidCode(code) {
-  return validCodes.includes(code);
-}
-
-// Nettoyer les abonnements expirés
-function cleanExpiredSubscriptions() {
-  const subscriptions = loadSubscriptions();
-  const now = new Date();
-  for (const senderId in subscriptions) {
-    if (new Date(subscriptions[senderId].expiresAt) < now) {
-      delete subscriptions[senderId];
-    }
-  }
-  saveSubscriptions(subscriptions);
 }
 
 // Fonction principale pour gérer les messages entrants
@@ -97,27 +38,20 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Gestion des codes d'abonnement
-    if (messageText.startsWith("code")) {
-      const userCode = messageText.split(" ")[1]; // Supposons que le code soit fourni après "code"
-      if (isValidCode(userCode)) {
-        const expirationDate = addSubscription(senderId, 30); // Abonnement pour 30 jours
-        await sendMessage(senderId, {
-          text: `🎉 Votre abonnement est activé et sera valide jusqu'au ${expirationDate.toLocaleDateString()}!`,
-        }, pageAccessToken);
-      } else {
-        await sendMessage(senderId, {
-          text: "❌ Code invalide. Veuillez vérifier et réessayer.",
-        }, pageAccessToken);
-      }
-      return;
-    }
+    // Si l'utilisateur attend une analyse d'image et entre une commande
+    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const args = messageText.split(' ');
+      const commandName = args[0].toLowerCase();
+      const command = commands.get(commandName);
 
-    // Vérification de l'abonnement avant d'utiliser une commande
-    if (!isSubscriptionActive(senderId)) {
-      await sendMessage(senderId, {
-        text: "⛔ Vous n'avez pas d'abonnement actif. Veuillez activer un abonnement avec un code valide.",
-      }, pageAccessToken);
+      if (command) {
+        userStates.delete(senderId); // Quitter le mode image
+        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
+        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+      }
+
+      const { imageUrl } = userStates.get(senderId);
+      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
     }
 
@@ -127,12 +61,28 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
+      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+        const previousCommand = userStates.get(senderId).lockedCommand;
+        if (previousCommand !== commandName) {
+          // Ligne supprimée ici pour éviter l'affichage
+        }
+      } else {
+        await sendMessage(senderId, { text: `` }, pageAccessToken);
+      }
+      userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    await sendMessage(senderId, {
-      text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer.",
-    }, pageAccessToken);
+    // Si une commande est verrouillée, utiliser la commande verrouillée pour traiter la demande
+    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+      const lockedCommand = userStates.get(senderId).lockedCommand;
+      const lockedCommandInstance = commands.get(lockedCommand);
+      if (lockedCommandInstance) {
+        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
+      }
+    } else {
+      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer ." }, pageAccessToken);
+    }
   }
 }
 
@@ -162,7 +112,7 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
     if (imageAnalysis) {
       const formattedResponse = `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}`;
       const maxMessageLength = 2000;
-
+      
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
         for (const message of messages) {
@@ -204,4 +154,62 @@ function splitMessageIntoChunks(message, chunkSize) {
   return chunks;
 }
 
+module.exports = { handleMessage };
+
+
+// Ajout du système d'abonnement
+
+const userSubscriptions = new Map(); // Gestion des abonnements des utilisateurs
+
+// Vérifier si un utilisateur a un abonnement actif
+function isSubscriptionActive(userId) {
+  const subscription = userSubscriptions.get(userId);
+  if (!subscription) return false;
+
+  const now = new Date();
+  return subscription.expirationDate > now; // Vérifie si la date actuelle est avant l'expiration
+}
+
+// Ajouter un abonnement pour un utilisateur
+function addSubscription(userId, days) {
+  const now = new Date();
+  const expirationDate = new Date(now.setDate(now.getDate() + days)); // Ajoute le nombre de jours
+  userSubscriptions.set(userId, { expirationDate });
+  return expirationDate;
+}
+
+// Valider un code d'abonnement
+function isValidCode(code) {
+  const validCodes = ['ABONNEMENT123', 'PREMIUM2024']; // Liste des codes valides
+  return validCodes.includes(code);
+}
+
+// Intégration dans le gestionnaire de messages
+async function handleMessage(event, pageAccessToken) {
+  const senderId = event.sender.id;
+
+  // Gestion des codes d'abonnement
+  if (event.message && event.message.text && event.message.text.startsWith("code")) {
+    const userCode = event.message.text.split(" ")[1]; // Supposons que le code soit fourni après "code"
+    if (isValidCode(userCode)) {
+      const expirationDate = addSubscription(senderId, 30); // Abonnement pour 30 jours
+      await sendMessage(senderId, {
+        text: `🎉 Votre abonnement est activé et sera valide jusqu'au ${expirationDate.toLocaleDateString()}!`,
+      }, pageAccessToken);
+    } else {
+      await sendMessage(senderId, {
+        text: "❌ Code invalide. Veuillez vérifier et réessayer.",
+      }, pageAccessToken);
+    }
+    return;
+  }
+
+  // Vérification de l'abonnement avant d'utiliser une commande
+  if (!isSubscriptionActive(senderId)) {
+    await sendMessage(senderId, {
+      text: "⛔ Vous n'avez pas d'abonnement actif. Veuillez activer un abonnement avec un code valide.",
+    }, pageAccessToken);
+    return;
+  }
+}
 module.exports = { handleMessage };
