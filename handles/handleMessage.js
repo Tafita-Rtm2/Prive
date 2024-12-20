@@ -42,14 +42,24 @@ async function handleMessage(event, pageAccessToken) {
     const messageText = event.message.text.trim();
 
     // Commande "stop" pour quitter le mode actuel
-    if (messageText.toLowerCase() === 'menu') {
+    if (messageText.toLowerCase() === 'stop') {
       userStates.delete(senderId);
-      await sendMessage(senderId, { text: "" }, pageAccessToken);
+      await sendMessage(senderId, { text: "🔓 Vous avez quitté le mode actuel. Tapez le bouton 'menu' pour continuer ✔." }, pageAccessToken);
       return;
     }
 
     // Si l'utilisateur attend une analyse d'image et entre une commande
     if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
+      const args = messageText.split(' ');
+      const commandName = args[0].toLowerCase();
+      const command = commands.get(commandName);
+
+      if (command) {
+        userStates.delete(senderId); // Quitter le mode image
+        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
+        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+      }
+
       const { imageUrl } = userStates.get(senderId);
       await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
       return;
@@ -64,23 +74,25 @@ async function handleMessage(event, pageAccessToken) {
       if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
         const previousCommand = userStates.get(senderId).lockedCommand;
         if (previousCommand !== commandName) {
-          await sendMessage(senderId, {
-            text: ''
-          }, pageAccessToken);
+          // Ligne supprimée ici pour éviter l'affichage
         }
       } else {
-        await sendMessage(senderId, {
-          text: ``
-        }, pageAccessToken);
+        await sendMessage(senderId, { text: `` }, pageAccessToken);
       }
       userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    // Réponse par défaut si la commande est inconnue
-    await sendMessage(senderId, {
-      text: "mila misafidy comande alo ianao vao afaka mametraka fanotaniana ka . Tapez 'Menu' pour voir la liste des commandes disponibles."
-    }, pageAccessToken);
+    // Si une commande est verrouillée, utiliser la commande verrouillée pour traiter la demande
+    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
+      const lockedCommand = userStates.get(senderId).lockedCommand;
+      const lockedCommandInstance = commands.get(lockedCommand);
+      if (lockedCommandInstance) {
+        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
+      }
+    } else {
+      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer ." }, pageAccessToken);
+    }
   }
 }
 
