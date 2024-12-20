@@ -12,7 +12,20 @@ const userConversations = new Map(); // Historique des conversations
 const subscriptionsFilePath = path.join(__dirname, 'handles/users.json');
 
 // Liste des codes d'abonnement valides
-const validCodes = ['1208', '2201', '8280', '2003', '0612', '1212'];
+const validCodes = ['1206', '2201', '8280', '2003', '0612', '1212'];
+
+// Vérification du code d'abonnement
+if (validCodes.includes(messageText.trim())) {
+  const expirationDate = addSubscription(senderId);
+  await sendMessage(senderId, {
+    text: `✅ Votre abonnement de 30 jours a été activé avec succès ! 🎉\n📅 Activation : ${new Date().toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}\n📅 Expiration : ${expirationDate.toLocaleString('fr-FR', { timeZone: 'Indian/Antananarivo' })}.\n\n🔑 Tapez 'menu' pour continuer !`,
+  }, pageAccessToken);
+} else {
+  // Code invalide
+  await sendMessage(senderId, {
+    text: `❌ Code d'abonnement invalide. Veuillez acheter un abonnement.\n\n👉 Contact :\n📞 WhatsApp : +261385858330\n🌐 Facebook : [RTM TAFITANIANA](https://www.facebook.com/manarintso.niaina)\n💳 Tarif : 3000 Ar pour 30 jours.`,
+  }, pageAccessToken);
+}
 
 // Charger les commandes
 const commandFiles = fs.readdirSync(path.join(__dirname, '../commands')).filter(file => file.endsWith('.js'));
