@@ -3,6 +3,7 @@ const path = require('path');
 const axios = require('axios');
 const { sendMessage } = require('./sendMessage');
 
+// Structures de données principales
 const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userConversations = new Map(); // Historique des conversations des utilisateurs
@@ -40,6 +41,7 @@ async function handleMessage(event, pageAccessToken) {
     if (validCodes.includes(messageText)) {
       const expirationDate = Date.now() + subscriptionDuration;
       userSubscriptions.set(senderId, expirationDate);
+      console.log(`Abonnement activé pour l'utilisateur ${senderId}. Valide jusqu'au : ${new Date(expirationDate).toLocaleString()}`);
       await sendMessage(senderId, {
         text: `✅ Code validé ! Votre abonnement de 30 jours est maintenant actif jusqu'au ${new Date(expirationDate).toLocaleDateString()} !`
       }, pageAccessToken);
@@ -105,18 +107,18 @@ async function handleMessage(event, pageAccessToken) {
 // Demander le prompt de l'utilisateur pour analyser l'image
 async function askForImagePrompt(senderId, imageUrl, pageAccessToken) {
   userStates.set(senderId, { awaitingImagePrompt: true, imageUrl: imageUrl });
-  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? ✨ Posez toutes vos questions à propos de cette photo !  📸😊." }, pageAccessToken);
+  await sendMessage(senderId, { text: "📷 Image reçue. Que voulez-vous que je fasse avec cette image ? Posez toutes vos questions !" }, pageAccessToken);
 }
 
 // Fonction pour analyser l'image avec le prompt fourni par l'utilisateur
 async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToken) {
   try {
-    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image.  Patientez un instant... 🤔  ⏳" }, pageAccessToken);
+    await sendMessage(senderId, { text: "🔍 Je traite votre requête concernant l'image. Patientez un instant..." }, pageAccessToken);
 
     const imageAnalysis = await analyzeImageWithGemini(imageUrl, prompt);
 
     if (imageAnalysis) {
-      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image  :\n${imageAnalysis}` }, pageAccessToken);
+      await sendMessage(senderId, { text: `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}` }, pageAccessToken);
     } else {
       await sendMessage(senderId, { text: "❌ Aucune information exploitable n'a été détectée dans cette image." }, pageAccessToken);
     }
@@ -145,10 +147,20 @@ async function analyzeImageWithGemini(imageUrl, prompt) {
 // Fonction pour vérifier l'abonnement de l'utilisateur
 function checkSubscription(senderId) {
   const expirationDate = userSubscriptions.get(senderId);
-  if (!expirationDate) return false; // Pas d'abonnement
-  if (Date.now() < expirationDate) return true; // Abonnement encore valide
-  // Supprimer l'abonnement si expiré
-  userSubscriptions.delete(senderId);
+  console.log(`Vérification de l'abonnement pour l'utilisateur ${senderId}. Date d'expiration : ${expirationDate}`);
+
+  if (!expirationDate) {
+    console.log("Aucun abonnement trouvé.");
+    return false; // Pas d'abonnement
+  }
+  
+  if (Date.now() < expirationDate) {
+    console.log("Abonnement valide.");
+    return true; // Abonnement encore valide
+  }
+
+  console.log("Abonnement expiré, suppression de l'entrée.");
+  userSubscriptions.delete(senderId); // Supprimer l'abonnement expiré
   return false;
 }
 
