@@ -14,7 +14,6 @@ for (const file of commandFiles) {
   commands.set(command.name, command);
 }
 
-
 // Liste des codes valides pour l'abonnement
 const validCodes = ['1208', '2201', '8280', '2003', '0612', '1212'];
 // Chemin vers le fichier JSON pour sauvegarder les abonnements
@@ -58,6 +57,23 @@ function addSubscription(senderId, days = 30) {
   return expirationDate;
 }
 
+// Valider les codes d'abonnement
+function isValidCode(code) {
+  return validCodes.includes(code);
+}
+
+// Nettoyer les abonnements expirés
+function cleanExpiredSubscriptions() {
+  const subscriptions = loadSubscriptions();
+  const now = new Date();
+  for (const senderId in subscriptions) {
+    if (new Date(subscriptions[senderId].expiresAt) < now) {
+      delete subscriptions[senderId];
+    }
+  }
+  saveSubscriptions(subscriptions);
+}
+
 // Fonction principale pour gérer les messages entrants
 async function handleMessage(event, pageAccessToken) {
   const senderId = event.sender.id;
@@ -81,20 +97,27 @@ async function handleMessage(event, pageAccessToken) {
       return;
     }
 
-    // Si l'utilisateur attend une analyse d'image et entre une commande
-    if (userStates.has(senderId) && userStates.get(senderId).awaitingImagePrompt) {
-      const args = messageText.split(' ');
-      const commandName = args[0].toLowerCase();
-      const command = commands.get(commandName);
-
-      if (command) {
-        userStates.delete(senderId); // Quitter le mode image
-        await sendMessage(senderId, { text: `🔓 Le mode image a été quitté. Exécution de la commande '${commandName}'.` }, pageAccessToken);
-        return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
+    // Gestion des codes d'abonnement
+    if (messageText.startsWith("code")) {
+      const userCode = messageText.split(" ")[1]; // Supposons que le code soit fourni après "code"
+      if (isValidCode(userCode)) {
+        const expirationDate = addSubscription(senderId, 30); // Abonnement pour 30 jours
+        await sendMessage(senderId, {
+          text: `🎉 Votre abonnement est activé et sera valide jusqu'au ${expirationDate.toLocaleDateString()}!`,
+        }, pageAccessToken);
+      } else {
+        await sendMessage(senderId, {
+          text: "❌ Code invalide. Veuillez vérifier et réessayer.",
+        }, pageAccessToken);
       }
+      return;
+    }
 
-      const { imageUrl } = userStates.get(senderId);
-      await analyzeImageWithPrompt(senderId, imageUrl, messageText, pageAccessToken);
+    // Vérification de l'abonnement avant d'utiliser une commande
+    if (!isSubscriptionActive(senderId)) {
+      await sendMessage(senderId, {
+        text: "⛔ Vous n'avez pas d'abonnement actif. Veuillez activer un abonnement avec un code valide.",
+      }, pageAccessToken);
       return;
     }
 
@@ -104,28 +127,12 @@ async function handleMessage(event, pageAccessToken) {
     const command = commands.get(commandName);
 
     if (command) {
-      if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-        const previousCommand = userStates.get(senderId).lockedCommand;
-        if (previousCommand !== commandName) {
-          // Ligne supprimée ici pour éviter l'affichage
-        }
-      } else {
-        await sendMessage(senderId, { text: `` }, pageAccessToken);
-      }
-      userStates.set(senderId, { lockedCommand: commandName });
       return await command.execute(senderId, args.slice(1), pageAccessToken, sendMessage);
     }
 
-    // Si une commande est verrouillée, utiliser la commande verrouillée pour traiter la demande
-    if (userStates.has(senderId) && userStates.get(senderId).lockedCommand) {
-      const lockedCommand = userStates.get(senderId).lockedCommand;
-      const lockedCommandInstance = commands.get(lockedCommand);
-      if (lockedCommandInstance) {
-        return await lockedCommandInstance.execute(senderId, args, pageAccessToken, sendMessage);
-      }
-    } else {
-      await sendMessage(senderId, { text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer ." }, pageAccessToken);
-    }
+    await sendMessage(senderId, {
+      text: "miarahaba mba ahafahana mampiasa dia. tapez le bouton 'menu' pour continuer.",
+    }, pageAccessToken);
   }
 }
 
@@ -155,7 +162,7 @@ async function analyzeImageWithPrompt(senderId, imageUrl, prompt, pageAccessToke
     if (imageAnalysis) {
       const formattedResponse = `📄 Voici la réponse à votre question concernant l'image :\n${imageAnalysis}`;
       const maxMessageLength = 2000;
-      
+
       if (formattedResponse.length > maxMessageLength) {
         const messages = splitMessageIntoChunks(formattedResponse, maxMessageLength);
         for (const message of messages) {
