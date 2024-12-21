@@ -1,8 +1,8 @@
 const axios = require('axios');
 
 module.exports = {
-  name: 'gpt-4o',
-  description: 'Pose une question à GPT-4o via l’API fournie.',
+  name: 'gpt-4o-pro',
+  description: 'Pose une question à GPT-4o Pro via l’API fournie.',
   author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -12,7 +12,7 @@ module.exports = {
       return sendMessage(
         senderId,
         {
-          text: "─────★─────\n✨GPT-4o\n👋 Merci de me choisir comme répondeur automatique ! 🤖 Je suis prêt à répondre à toutes vos questions. 🤔 Posez-les, et j'y répondrai ! 😉\n─────★─────.",
+          text: "─────★─────\n✨GPT-4o Pro\n👋 Merci de me choisir comme assistant ! Posez votre question, et je vous répondrai avec plaisir ! 😉\n─────★─────.",
         },
         pageAccessToken
       );
@@ -22,12 +22,12 @@ module.exports = {
       // Informer l'utilisateur que la réponse est en cours
       await sendMessage(
         senderId,
-        { text: '💬 GPT-4o est en train de répondre⏳...\n\n─────★─────' },
+        { text: '💬 GPT-4o Pro est en train de répondre⏳...\n\n─────★─────' },
         pageAccessToken
       );
 
       // Construire l'URL de l'API
-      const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o?q=${encodeURIComponent(
+      const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(
         prompt
       )}&uid=${encodeURIComponent(senderId)}`;
 
@@ -45,7 +45,7 @@ module.exports = {
 
       // Formater la réponse correctement
       const formattedResponse = `─────★─────\n` +
-                                `✨GPT-4o\n\n${text}\n` +
+                                `✨GPT-4o Pro\n\n${text}\n` +
                                 `─────★─────\n` +
                                 `🕒 ${madagascarTime}`;
 
@@ -60,7 +60,7 @@ module.exports = {
         await sendMessage(senderId, { text: formattedResponse }, pageAccessToken);
       }
     } catch (error) {
-      console.error("Erreur lors de l'appel à l'API GPT-4o :", error);
+      console.error("Erreur lors de l'appel à l'API GPT-4o Pro :", error);
 
       // Envoyer un message d'erreur en cas de problème
       await sendMessage(
