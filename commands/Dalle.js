@@ -1,16 +1,13 @@
 const axios = require('axios');
 
-// Stocker les conversations dans un objet pour chaque utilisateur
-const conversations = {};
-
 module.exports = {
   name: 'gpt-4o-pro',
-  description: 'Pose une question à GPT-4o Pro via l’API fournie avec gestion du contexte.',
+  description: 'Pose une question via l’API GPT-4o-Pro.',
   author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
-    // Vérifier que l'utilisateur a bien posé une question
     const prompt = args.join(' ');
+
     if (!prompt) {
       return sendMessage(
         senderId,
@@ -22,27 +19,16 @@ module.exports = {
     }
 
     try {
-      // Informer l'utilisateur que le bot est en train de répondre
+      // Informer l'utilisateur que la réponse est en cours
       await sendMessage(
         senderId,
         { text: '💬 GPT-4o Pro est en train de répondre⏳...\n\n─────★─────' },
         pageAccessToken
       );
 
-      // Initialiser ou récupérer l'historique de conversation de l'utilisateur
-      if (!conversations[senderId]) {
-        conversations[senderId] = [];
-      }
-
-      // Ajouter la question de l'utilisateur à l'historique
-      conversations[senderId].push(`Utilisateur : ${prompt}`);
-
-      // Construire le contexte pour l'API (limiter à 10 derniers messages pour éviter trop de données)
-      const context = conversations[senderId].slice(-10).join('\n');
-
-      // Construire l'URL de l'API avec le contexte
+      // Construire l'URL de l'API
       const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(
-        context
+        prompt
       )}&uid=${encodeURIComponent(senderId)}`;
 
       // Appel à l'API
@@ -54,17 +40,14 @@ module.exports = {
         throw new Error('Réponse invalide de l’API.');
       }
 
-      // Ajouter la réponse de l'API à l'historique
-      conversations[senderId].push(`GPT-4o Pro : ${text}`);
-
-      // Obtenir l'heure et la date de Madagascar
-      const madagascarTime = getMadagascarTime();
+      // Obtenir l'heure actuelle
+      const currentTime = getMadagascarTime();
 
       // Formater la réponse correctement
       const formattedResponse = `─────★─────\n` +
                                 `✨GPT-4o Pro\n\n${text}\n` +
                                 `─────★─────\n` +
-                                `🕒 ${madagascarTime}`;
+                                `🕒 ${currentTime}`;
 
       // Gérer les réponses longues
       const maxMessageLength = 2000;
@@ -89,10 +72,10 @@ module.exports = {
   },
 };
 
-// Fonction pour obtenir l'heure et la date de Madagascar
+// Fonction pour obtenir l'heure et la date actuelles à Madagascar
 function getMadagascarTime() {
   const options = { timeZone: 'Indian/Antananarivo', hour12: false };
-  return new Date().toLocaleString('fr-FR', {
+  const madagascarDate = new Date().toLocaleString('fr-FR', {
     ...options,
     weekday: 'long',
     year: 'numeric',
@@ -102,6 +85,7 @@ function getMadagascarTime() {
     minute: '2-digit',
     second: '2-digit',
   });
+  return madagascarDate; // Exemple : "samedi 21 décembre 2024, 10:30:45"
 }
 
 // Fonction utilitaire pour découper un message en morceaux
