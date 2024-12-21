@@ -1,8 +1,11 @@
 const axios = require('axios');
 
+// Stocker les conversations dans un objet (par utilisateur)
+const conversations = {};
+
 module.exports = {
   name: 'gpt-4o-pro',
-  description: 'Pose une question à GPT-4o Pro via l’API fournie.',
+  description: 'Pose une question à GPT-4o Pro via l’API fournie avec gestion du contexte.',
   author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
@@ -26,9 +29,20 @@ module.exports = {
         pageAccessToken
       );
 
+      // Maintenir l'historique de conversation de l'utilisateur
+      if (!conversations[senderId]) {
+        conversations[senderId] = []; // Initialiser l'historique pour ce user
+      }
+
+      // Ajouter la nouvelle question au contexte
+      conversations[senderId].push(`Utilisateur : ${prompt}`);
+
+      // Construire le contexte à envoyer à l'API
+      const conversationContext = conversations[senderId].join('\n');
+
       // Construire l'URL de l'API
       const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(
-        prompt
+        conversationContext
       )}&uid=${encodeURIComponent(senderId)}`;
 
       // Appel à l'API
@@ -39,6 +53,9 @@ module.exports = {
       if (!text) {
         throw new Error('Réponse invalide de l’API.');
       }
+
+      // Ajouter la réponse au contexte
+      conversations[senderId].push(`GPT-4o Pro : ${text}`);
 
       // Obtenir l'heure de Madagascar
       const madagascarTime = getMadagascarTime();
