@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-// Stocker les conversations dans un objet (par utilisateur)
+// Stocker les conversations dans un objet pour chaque utilisateur
 const conversations = {};
 
 module.exports = {
@@ -9,8 +9,8 @@ module.exports = {
   author: 'Votre nom',
 
   async execute(senderId, args, pageAccessToken, sendMessage) {
+    // Vérifier que l'utilisateur a bien posé une question
     const prompt = args.join(' ');
-
     if (!prompt) {
       return sendMessage(
         senderId,
@@ -22,27 +22,27 @@ module.exports = {
     }
 
     try {
-      // Informer l'utilisateur que la réponse est en cours
+      // Informer l'utilisateur que le bot est en train de répondre
       await sendMessage(
         senderId,
         { text: '💬 GPT-4o Pro est en train de répondre⏳...\n\n─────★─────' },
         pageAccessToken
       );
 
-      // Maintenir l'historique de conversation de l'utilisateur
+      // Initialiser ou récupérer l'historique de conversation de l'utilisateur
       if (!conversations[senderId]) {
-        conversations[senderId] = []; // Initialiser l'historique pour ce user
+        conversations[senderId] = [];
       }
 
-      // Ajouter la nouvelle question au contexte
+      // Ajouter la question de l'utilisateur à l'historique
       conversations[senderId].push(`Utilisateur : ${prompt}`);
 
-      // Construire le contexte à envoyer à l'API
-      const conversationContext = conversations[senderId].join('\n');
+      // Construire le contexte pour l'API (limiter à 10 derniers messages pour éviter trop de données)
+      const context = conversations[senderId].slice(-10).join('\n');
 
-      // Construire l'URL de l'API
+      // Construire l'URL de l'API avec le contexte
       const apiUrl = `https://kaiz-apis.gleeze.com/api/gpt-4o-pro?q=${encodeURIComponent(
-        conversationContext
+        context
       )}&uid=${encodeURIComponent(senderId)}`;
 
       // Appel à l'API
@@ -54,10 +54,10 @@ module.exports = {
         throw new Error('Réponse invalide de l’API.');
       }
 
-      // Ajouter la réponse au contexte
+      // Ajouter la réponse de l'API à l'historique
       conversations[senderId].push(`GPT-4o Pro : ${text}`);
 
-      // Obtenir l'heure de Madagascar
+      // Obtenir l'heure et la date de Madagascar
       const madagascarTime = getMadagascarTime();
 
       // Formater la réponse correctement
@@ -92,7 +92,7 @@ module.exports = {
 // Fonction pour obtenir l'heure et la date de Madagascar
 function getMadagascarTime() {
   const options = { timeZone: 'Indian/Antananarivo', hour12: false };
-  const madagascarDate = new Date().toLocaleString('fr-FR', {
+  return new Date().toLocaleString('fr-FR', {
     ...options,
     weekday: 'long',
     year: 'numeric',
@@ -102,7 +102,6 @@ function getMadagascarTime() {
     minute: '2-digit',
     second: '2-digit',
   });
-  return madagascarDate; // Exemple : "vendredi 13 décembre 2024, 16:40:45"
 }
 
 // Fonction utilitaire pour découper un message en morceaux
