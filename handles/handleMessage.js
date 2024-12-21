@@ -7,7 +7,7 @@ const commands = new Map();
 const userStates = new Map(); // Suivi des états des utilisateurs
 const userConversations = new Map(); // Historique des conversations des utilisateurs
 const userSubscriptions = new Map(); // Gestion des abonnements utilisateurs
-const validCodes = ["2201", "1208", "0612", "1212", "2003"]; // Codes d'abonnement valides
+const validCodes = ["2201", "1208", "0612", "1212", "2003", "1234"]; // Codes d'abonnement valides
 const subscriptionDuration = 30 * 24 * 60 * 60 * 1000; // Durée de l'abonnement : 30 jours en millisecondes
 
 // Charger les commandes
