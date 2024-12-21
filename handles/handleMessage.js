@@ -111,7 +111,7 @@ async function handleSubscriptionFlow(senderId, messageText, pageAccessToken) {
 
   // Si l'utilisateur envoie un message qui n'est pas un code valide
   await sendMessage(senderId, {
-    text: ` Bonjour chers utilisateurs de la page Chatbot Facebook Messenger de Malagasy Bot Traduction ! 👋🤖🇲🇬 \nPour utiliser mes services, vous devez d'abord fournir un code de validation pour activer le bot. 🔐🔑 \n\nSi vous l'avez déjà, veuillez le fournir. 📝✅ \n\nSi vous ne l'avez pas encore, veuillez faire un abonnement chez l'admin. 📞\n\nContacts :  Facebook : RTM Tafitaniaina (lien profil) 👤🌐 WhatsApp : +261 38 58 58 330 📱 Numéro : +261 38 58 58 330 ☎️\n\nLes paiements disponibles sont via Mvola et Airtel Money. 💸💳\n\nUn code de validation est valide pendant 30 jours. ⏳📆\n\nL'abonnement pour utiliser tous les services pendant 30 jours coûte 3000 Ar. 💯💰.`
+    text: ` Bonjour chers utilisateurs de la page Chatbot Facebook Messenger de Malagasy Bot Traduction ! 👋🤖🇲🇬 \nPour utiliser mes services, vous devez d'abord fournir un code de validation pour activer le bot. 🔐🔑 \n\nSi vous l'avez déjà, veuillez le fournir. 📝✅ \n\nSi vous ne l'avez pas encore, veuillez faire un abonnement chez l'admin. 📞\n\nContacts :  Facebook : RTM Tafitaniaina (https://www.facebook.com/manarintso.niaina) \n👤🌐 WhatsApp : +261 38 58 58 330 📱 Numéro : +261 38 58 58 330 ☎️\n\nLes paiements disponibles sont via Mvola et Airtel Money. 💸💳\n\nUn code de validation est valide pendant 30 jours. ⏳📆\n\nL'abonnement pour utiliser tous les services pendant 30 jours coûte 3000 Ar. 💯💰.`
   }, pageAccessToken);
 }
 
